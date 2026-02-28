@@ -289,7 +289,9 @@ def _check_cost_budget(usage: dict[str, Any] | None) -> str | None:
     return None
 
 
-def _record_export_event(evt: UntetherEvent, resume: ResumeToken | None) -> None:
+def _record_export_event(
+    evt: UntetherEvent, resume: ResumeToken | None, *, channel_id: int = 0
+) -> None:
     """Record an event for the /export command."""
     try:
         from .telegram.commands.export import record_session_event, record_session_usage
@@ -316,8 +318,8 @@ def _record_export_event(evt: UntetherEvent, resume: ResumeToken | None) -> None
             event_dict["answer"] = evt.answer
             event_dict["error"] = evt.error
             if evt.usage:
-                record_session_usage(session_id, evt.usage)
-        record_session_event(session_id, event_dict)
+                record_session_usage(session_id, evt.usage, channel_id=channel_id)
+        record_session_event(session_id, event_dict, channel_id=channel_id)
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "export_event.record_failed",
@@ -651,6 +653,7 @@ async def run_runner_with_cancel(
     edits: ProgressEdits,
     running_task: RunningTask | None,
     on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]] | None,
+    channel_id: int = 0,
 ) -> RunOutcome:
     outcome = RunOutcome()
     try:
@@ -676,7 +679,7 @@ async def run_runner_with_cancel(
                             outcome.resume = evt.resume or outcome.resume
                             outcome.completed = evt
                         # A3: Record events for /export
-                        _record_export_event(evt, outcome.resume)
+                        _record_export_event(evt, outcome.resume, channel_id=channel_id)
                         await edits.on_event(evt)
                 finally:
                     tg.cancel_scope.cancel()
@@ -847,6 +850,7 @@ async def handle_message(
                 edits=edits,
                 running_task=running_task,
                 on_thread_known=on_thread_known,
+                channel_id=incoming.channel_id,
             )
         except Exception as exc:
             error = exc
