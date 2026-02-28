@@ -9,6 +9,7 @@ import anyio
 import httpx
 
 from .context import RunContext
+from .error_hints import get_error_hint as _get_error_hint
 from .logging import bind_run_context, get_logger
 from .model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent, UntetherEvent
 from .presenter import Presenter
@@ -876,6 +877,9 @@ async def handle_message(
     if error is not None:
         sync_resume_token(progress_tracker, outcome.resume)
         err_body = _format_error(error)
+        hint = _get_error_hint(err_body)
+        if hint:
+            err_body = f"{err_body}\n\n\N{ELECTRIC LIGHT BULB} {hint}"
         state = progress_tracker.snapshot(
             resume_formatter=runner.format_resume,
             context_line=context_line,
@@ -973,10 +977,14 @@ async def handle_message(
             break
 
     if run_ok is False and run_error:
+        error_text = str(run_error)
+        hint = _get_error_hint(error_text)
+        if hint:
+            error_text = f"{error_text}\n\n\N{ELECTRIC LIGHT BULB} {hint}"
         if final_answer.strip():
-            final_answer = f"{final_answer}\n\n{run_error}"
+            final_answer = f"{final_answer}\n\n{error_text}"
         else:
-            final_answer = str(run_error)
+            final_answer = error_text
 
     status = (
         "error" if run_ok is False else ("done" if final_answer.strip() else "error")
