@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from typing import Any
 
 from untether.triggers.auth import verify_auth
 from untether.triggers.settings import WebhookConfig
 
 
 def _make_webhook(
-    auth: str = "bearer",
+    auth: Any = "bearer",
     secret: str | None = "test_secret",
 ) -> WebhookConfig:
     return WebhookConfig(

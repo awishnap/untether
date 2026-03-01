@@ -6,6 +6,7 @@ import msgspec
 
 from ..context import RunContext
 from ..logging import get_logger
+from ..transport import ChannelId
 from .engine_overrides import EngineOverrides, normalize_overrides
 from .state_store import JsonStateStore
 
@@ -32,7 +33,7 @@ def resolve_prefs_path(config_path: Path) -> Path:
     return config_path.with_name(STATE_FILENAME)
 
 
-def _chat_key(chat_id: int) -> str:
+def _chat_key(chat_id: ChannelId) -> str:
     return str(chat_id)
 
 
@@ -76,7 +77,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             logger=logger,
         )
 
-    async def get_default_engine(self, chat_id: int) -> str | None:
+    async def get_default_engine(self, chat_id: ChannelId) -> str | None:
         async with self._lock:
             self._reload_locked_if_needed()
             chat = self._get_chat_locked(chat_id)
@@ -84,7 +85,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
                 return None
             return _normalize_text(chat.default_engine)
 
-    async def set_default_engine(self, chat_id: int, engine: str | None) -> None:
+    async def set_default_engine(self, chat_id: ChannelId, engine: str | None) -> None:
         normalized = _normalize_text(engine)
         async with self._lock:
             self._reload_locked_if_needed()
@@ -103,10 +104,10 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             self._save_locked()
             logger.info("prefs.engine.set", chat_id=chat_id, engine=normalized)
 
-    async def clear_default_engine(self, chat_id: int) -> None:
+    async def clear_default_engine(self, chat_id: ChannelId) -> None:
         await self.set_default_engine(chat_id, None)
 
-    async def get_trigger_mode(self, chat_id: int) -> str | None:
+    async def get_trigger_mode(self, chat_id: ChannelId) -> str | None:
         async with self._lock:
             self._reload_locked_if_needed()
             chat = self._get_chat_locked(chat_id)
@@ -114,7 +115,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
                 return None
             return _normalize_trigger_mode(chat.trigger_mode)
 
-    async def set_trigger_mode(self, chat_id: int, mode: str | None) -> None:
+    async def set_trigger_mode(self, chat_id: ChannelId, mode: str | None) -> None:
         normalized = _normalize_trigger_mode(mode)
         async with self._lock:
             self._reload_locked_if_needed()
@@ -133,10 +134,10 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             self._save_locked()
             logger.info("prefs.trigger.set", chat_id=chat_id, mode=normalized)
 
-    async def clear_trigger_mode(self, chat_id: int) -> None:
+    async def clear_trigger_mode(self, chat_id: ChannelId) -> None:
         await self.set_trigger_mode(chat_id, None)
 
-    async def get_context(self, chat_id: int) -> RunContext | None:
+    async def get_context(self, chat_id: ChannelId) -> RunContext | None:
         async with self._lock:
             self._reload_locked_if_needed()
             chat = self._get_chat_locked(chat_id)
@@ -148,7 +149,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             branch = _normalize_text(chat.context_branch)
             return RunContext(project=project, branch=branch)
 
-    async def set_context(self, chat_id: int, context: RunContext | None) -> None:
+    async def set_context(self, chat_id: ChannelId, context: RunContext | None) -> None:
         project = _normalize_text(context.project) if context is not None else None
         branch = _normalize_text(context.branch) if context is not None else None
         async with self._lock:
@@ -168,11 +169,11 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             chat.context_branch = branch
             self._save_locked()
 
-    async def clear_context(self, chat_id: int) -> None:
+    async def clear_context(self, chat_id: ChannelId) -> None:
         await self.set_context(chat_id, None)
 
     async def get_engine_override(
-        self, chat_id: int, engine: str
+        self, chat_id: ChannelId, engine: str
     ) -> EngineOverrides | None:
         engine_key = _normalize_engine_id(engine)
         if engine_key is None:
@@ -186,7 +187,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             return normalize_overrides(override)
 
     async def set_engine_override(
-        self, chat_id: int, engine: str, override: EngineOverrides | None
+        self, chat_id: ChannelId, engine: str, override: EngineOverrides | None
     ) -> None:
         engine_key = _normalize_engine_id(engine)
         if engine_key is None:
@@ -218,13 +219,13 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
                 permission_mode=normalized.permission_mode,
             )
 
-    async def clear_engine_override(self, chat_id: int, engine: str) -> None:
+    async def clear_engine_override(self, chat_id: ChannelId, engine: str) -> None:
         await self.set_engine_override(chat_id, engine, None)
 
-    def _get_chat_locked(self, chat_id: int) -> _ChatPrefs | None:
+    def _get_chat_locked(self, chat_id: ChannelId) -> _ChatPrefs | None:
         return self._state.chats.get(_chat_key(chat_id))
 
-    def _ensure_chat_locked(self, chat_id: int) -> _ChatPrefs:
+    def _ensure_chat_locked(self, chat_id: ChannelId) -> _ChatPrefs:
         key = _chat_key(chat_id)
         entry = self._state.chats.get(key)
         if entry is not None:
@@ -249,7 +250,7 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
                 return True
         return False
 
-    def _remove_chat_locked(self, chat_id: int) -> bool:
+    def _remove_chat_locked(self, chat_id: ChannelId) -> bool:
         key = _chat_key(chat_id)
         if key not in self._state.chats:
             return False

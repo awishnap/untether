@@ -116,6 +116,7 @@ def test_ask_user_question_shows_question_text() -> None:
     )
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert "Should I add tests?" in events[0].action.title
 
 
@@ -153,6 +154,7 @@ def test_ask_user_question_has_inline_keyboard() -> None:
         }
     )
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
+    assert isinstance(events[0], ActionEvent)
     detail = events[0].action.detail
     kb = detail["inline_keyboard"]
     assert "buttons" in kb
@@ -238,6 +240,7 @@ def test_ask_question_nested_questions_array() -> None:
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
     assert len(events) == 1
     # Question text should be extracted and shown
+    assert isinstance(events[0], ActionEvent)
     assert "What is your favourite colour?" in events[0].action.title
     # Should be registered in pending
     assert "req-nested-1" in _PENDING_ASK_REQUESTS

@@ -76,7 +76,7 @@ def _make_dispatcher(transport=None, run_job=None):
             run_job=run_job,
             transport=transport,
             default_chat_id=100,
-            task_group=FakeTaskGroup(),
+            task_group=FakeTaskGroup(),  # type: ignore[arg-type]
         ),
         transport,
         run_job,
@@ -252,7 +252,7 @@ async def test_internal_error_returns_500():
         async def dispatch_webhook(self, wh, prompt):
             raise RuntimeError("boom")
 
-    app = build_webhook_app(settings, ExplodingDispatcher())
+    app = build_webhook_app(settings, ExplodingDispatcher())  # type: ignore[arg-type]
 
     async with TestClient(TestServer(app)) as cl:
         resp = await cl.post(

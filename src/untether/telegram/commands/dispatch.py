@@ -189,7 +189,7 @@ async def _dispatch_callback(
             return
         # Early callback answering: clear the Telegram spinner immediately
         if getattr(backend, "answer_early", False):
-            toast = backend.early_answer_toast(args_text)
+            toast = backend.early_answer_toast(args_text)  # type: ignore[attr-defined]
             if toast is not None:
                 await _answer_callback(toast)
 

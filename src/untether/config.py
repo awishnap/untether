@@ -99,8 +99,10 @@ class ProjectsConfig:
             return self.projects.get(self.default_project)
         return self.projects.get(alias.lower())
 
-    def project_for_chat(self, chat_id: int | None) -> str | None:
+    def project_for_chat(self, chat_id: int | str | None) -> str | None:
         if chat_id is None:
+            return None
+        if isinstance(chat_id, str):
             return None
         return self.chat_map.get(chat_id)
 

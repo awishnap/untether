@@ -85,7 +85,7 @@ def _make_webhook(**kwargs: Any) -> WebhookConfig:
         "prompt_template": "Hello",
     }
     defaults.update(kwargs)
-    return WebhookConfig(**defaults)
+    return WebhookConfig(**defaults)  # type: ignore[arg-type]
 
 
 def _make_cron(**kwargs: Any) -> CronConfig:
@@ -95,7 +95,7 @@ def _make_cron(**kwargs: Any) -> CronConfig:
         "prompt": "Run daily check",
     }
     defaults.update(kwargs)
-    return CronConfig(**defaults)
+    return CronConfig(**defaults)  # type: ignore[arg-type]
 
 
 @pytest.mark.anyio

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from untether.markdown import (
     MarkdownFormatter,
     format_verbose_detail,
 )
-from untether.model import Action
+from untether.model import Action, ActionKind
 from untether.progress import ActionState, ProgressState
 
 
@@ -179,7 +181,7 @@ class TestFormatVerboseDetail:
         assert result is None
 
     def test_none_detail(self):
-        action = Action(id="1", kind="tool", title="unknown", detail=None)
+        action = Action(id="1", kind="tool", title="unknown", detail=None)  # type: ignore[arg-type]
         result = format_verbose_detail(action)
         assert result is None
 
@@ -214,13 +216,13 @@ class TestFormatVerboseDetail:
 
 def _make_action_state(
     action_id: str,
-    kind: str = "tool",
+    kind: ActionKind = "tool",
     title: str = "Read",
     phase: str = "completed",
     ok: bool = True,
-    detail: dict | None = None,
+    detail: dict[str, Any] | None = None,
 ) -> ActionState:
-    action = Action(id=action_id, kind=kind, title=title, detail=detail)
+    action = Action(id=action_id, kind=kind, title=title, detail=detail or {})
     return ActionState(
         action=action,
         phase=phase,

@@ -279,7 +279,7 @@ class TransportRuntime:
         project = self._projects.projects.get(key)
         return project.alias if project is not None else key
 
-    def default_context_for_chat(self, chat_id: int | None) -> RunContext | None:
+    def default_context_for_chat(self, chat_id: int | str | None) -> RunContext | None:
         project_key = self._projects.project_for_chat(chat_id)
         if project_key is None:
             return None

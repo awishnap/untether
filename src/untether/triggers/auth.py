@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from collections.abc import Mapping
+from typing import Any
 
 from .settings import WebhookConfig
 
@@ -50,7 +51,7 @@ def _verify_hmac(
     secret: str,
     body: bytes,
     headers: Mapping[str, str],
-    algo: type,
+    algo: Any,
     sig_headers: tuple[str, ...],
 ) -> bool:
     expected = hmac.new(secret.encode(), body, algo).hexdigest()

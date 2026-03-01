@@ -956,7 +956,7 @@ async def _notify_drain_start(
         text="\U0001f504 Restarting \N{EM DASH} waiting for your run to finish\N{HORIZONTAL ELLIPSIS}",
         extra={},
     )
-    notified: set[int] = set()
+    notified: set[int | str] = set()
     for ref in list(running_tasks):
         if ref.channel_id not in notified:
             notified.add(ref.channel_id)
@@ -987,7 +987,7 @@ async def _notify_drain_timeout(
         ),
         extra={},
     )
-    notified: set[int] = set()
+    notified: set[int | str] = set()
     for ref in list(running_tasks):
         if ref.channel_id not in notified:
             notified.add(ref.channel_id)

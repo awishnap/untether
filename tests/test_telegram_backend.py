@@ -341,6 +341,7 @@ def test_build_versions_line(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda cmd: versions.get(cmd),
     )
     line = telegram_backend._build_versions_line(("claude", "opencode"))
+    assert line is not None
     assert "py " in line
     assert "claude 2.1.63" in line
     assert "opencode 1.1.11" in line

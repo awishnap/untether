@@ -120,7 +120,9 @@ def _apply_preamble(prompt: str) -> str:
     return f"{text}\n\n---\n\n{prompt}"
 
 
-def _resolve_presenter(default_presenter: Presenter, channel_id: int) -> Presenter:
+def _resolve_presenter(
+    default_presenter: Presenter, channel_id: ChannelId
+) -> Presenter:
     """Return a presenter with the effective verbosity for this channel.
 
     Checks for a per-chat /verbose override. If one exists and differs from
@@ -291,7 +293,7 @@ def _check_cost_budget(usage: dict[str, Any] | None) -> str | None:
 
 
 def _record_export_event(
-    evt: UntetherEvent, resume: ResumeToken | None, *, channel_id: int = 0
+    evt: UntetherEvent, resume: ResumeToken | None, *, channel_id: ChannelId = 0
 ) -> None:
     """Record an event for the /export command."""
     try:
@@ -654,7 +656,7 @@ async def run_runner_with_cancel(
     edits: ProgressEdits,
     running_task: RunningTask | None,
     on_thread_known: Callable[[ResumeToken, anyio.Event], Awaitable[None]] | None,
-    channel_id: int = 0,
+    channel_id: ChannelId = 0,
 ) -> RunOutcome:
     outcome = RunOutcome()
     try:

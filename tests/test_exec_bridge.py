@@ -163,7 +163,7 @@ def test_codex_extract_resume_accepts_plain_line() -> None:
     sys.version_info < (3, 14), reason="uuid.uuid7 requires Python 3.14+"
 )
 def test_codex_extract_resume_accepts_uuid7() -> None:
-    uuid7 = uuid.uuid7
+    uuid7 = uuid.uuid7  # type: ignore[attr-defined]
     token = str(uuid7())
     runner = CodexRunner(codex_cmd="codex", extra_args=[])
     text = f"`codex resume {token}`"

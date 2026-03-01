@@ -59,6 +59,7 @@ def test_auto_compaction_end_aborted():
     event = pi_schema.AutoCompactionEnd(result=None, aborted=True, willRetry=False)
     events = translate_pi_event(event, title="pi", meta=None, state=state)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].ok is False
     assert "aborted" in events[0].action.title
 
@@ -72,6 +73,7 @@ def test_auto_compaction_end_no_tokens():
     event = pi_schema.AutoCompactionEnd(result={}, aborted=False)
     events = translate_pi_event(event, title="pi", meta=None, state=state)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.title == "context compacted"
 
 
@@ -81,6 +83,7 @@ def test_auto_compaction_start_no_reason():
     event = pi_schema.AutoCompactionStart(reason=None)
     events = translate_pi_event(event, title="pi", meta=None, state=state)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert "compacting context" in events[0].action.title
     # No reason suffix
     assert "(" not in events[0].action.title
@@ -93,6 +96,7 @@ def test_compaction_sequence():
     start_event = pi_schema.AutoCompactionStart(reason="threshold")
     start_events = translate_pi_event(start_event, title="pi", meta=None, state=state)
     assert len(start_events) == 1
+    assert isinstance(start_events[0], ActionEvent)
     action_id = start_events[0].action.id
 
     end_event = pi_schema.AutoCompactionEnd(
@@ -100,4 +104,5 @@ def test_compaction_sequence():
     )
     end_events = translate_pi_event(end_event, title="pi", meta=None, state=state)
     assert len(end_events) == 1
+    assert isinstance(end_events[0], ActionEvent)
     assert end_events[0].action.id == action_id

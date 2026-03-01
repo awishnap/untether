@@ -15,6 +15,7 @@ import re
 import shutil
 import time
 import tty
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1094,7 +1095,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         logger: Any,
         pid: int,
         session_stdin: Any = None,
-    ) -> anyio.abc.AsyncIterator[UntetherEvent]:
+    ) -> AsyncIterator[UntetherEvent]:
         """Override to drain auto-approve queue after every line, not just after yielded events.
 
         The base class only drains auto-approves in run_impl after `yield evt`.
@@ -1349,7 +1350,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
 
     async def run_impl(
         self, prompt: str, resume: ResumeToken | None
-    ) -> anyio.abc.AsyncIterator[UntetherEvent]:
+    ) -> AsyncIterator[UntetherEvent]:
         """
         Override run_impl to support two modes:
 

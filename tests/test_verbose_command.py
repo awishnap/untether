@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from untether.telegram.commands.verbose import (
@@ -20,7 +22,7 @@ def _clear_overrides():
     _VERBOSE_OVERRIDES.clear()
 
 
-def _make_ctx(args: str = "", chat_id: int = 123) -> object:
+def _make_ctx(args: str = "", chat_id: int = 123) -> Any:
     """Create a minimal command context for testing."""
     from unittest.mock import MagicMock
 

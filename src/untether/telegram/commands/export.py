@@ -8,17 +8,20 @@ from datetime import UTC, datetime
 
 from ...commands import CommandBackend, CommandContext, CommandResult
 from ...logging import get_logger
+from ...transport import ChannelId
 
 logger = get_logger(__name__)
 
 # Store recent completed events for export
 # Keyed by (channel_id, session_id) -> (timestamp, events_list, usage_dict)
-_SessionKey = tuple[int, str]
+_SessionKey = tuple[ChannelId, str]
 _SESSION_HISTORY: dict[_SessionKey, tuple[float, list[dict], dict | None]] = {}
 _MAX_SESSIONS = 20
 
 
-def record_session_event(session_id: str, event: dict, *, channel_id: int = 0) -> None:
+def record_session_event(
+    session_id: str, event: dict, *, channel_id: ChannelId = 0
+) -> None:
     """Record an event for later export."""
     key: _SessionKey = (channel_id, session_id)
     entry = _SESSION_HISTORY.get(key)
@@ -36,7 +39,9 @@ def record_session_event(session_id: str, event: dict, *, channel_id: int = 0) -
         logger.debug("export.session.trimmed", removed=oldest_key)
 
 
-def record_session_usage(session_id: str, usage: dict, *, channel_id: int = 0) -> None:
+def record_session_usage(
+    session_id: str, usage: dict, *, channel_id: ChannelId = 0
+) -> None:
     """Record final usage data for a session."""
     key: _SessionKey = (channel_id, session_id)
     entry = _SESSION_HISTORY.get(key)

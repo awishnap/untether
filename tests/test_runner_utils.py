@@ -531,7 +531,10 @@ async def test_drain_stderr_capture() -> None:
 
         tg.start_soon(_write)
         await drain_stderr(
-            receive, __import__("structlog").get_logger(), "test", capture
+            receive,
+            __import__("structlog").get_logger(),
+            "test",
+            capture,  # type: ignore[arg-type]
         )
 
     assert len(capture) == _STDERR_CAPTURE_MAX
@@ -553,7 +556,7 @@ async def test_drain_stderr_no_capture() -> None:
                 await send.send(b"hello\n")
 
         tg.start_soon(_write)
-        await drain_stderr(receive, __import__("structlog").get_logger(), "test")
+        await drain_stderr(receive, __import__("structlog").get_logger(), "test")  # type: ignore[arg-type]
 
 
 # ===========================================================================

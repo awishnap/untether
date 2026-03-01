@@ -6,6 +6,7 @@ from typing import Literal
 
 from ...commands import CommandBackend, CommandContext, CommandResult
 from ...logging import get_logger
+from ...transport import ChannelId
 
 logger = get_logger(__name__)
 
@@ -13,10 +14,10 @@ Verbosity = Literal["compact", "verbose"]
 
 # Module-level override: when set, overrides config-level verbosity.
 # Keyed by chat_id for future multi-chat support; None = use config default.
-_VERBOSE_OVERRIDES: dict[int, Verbosity] = {}
+_VERBOSE_OVERRIDES: dict[ChannelId, Verbosity] = {}
 
 
-def get_verbosity_override(chat_id: int) -> Verbosity | None:
+def get_verbosity_override(chat_id: ChannelId) -> Verbosity | None:
     """Return the per-chat verbosity override, or None for config default."""
     return _VERBOSE_OVERRIDES.get(chat_id)
 

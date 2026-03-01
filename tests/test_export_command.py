@@ -47,6 +47,7 @@ class TestRecordSessionEvent:
         record_session_event("sess1", {"type": "started"}, channel_id=CHAT_A)
         record_session_usage("sess1", {"total_cost_usd": 0.15}, channel_id=CHAT_A)
         _, _, usage = _SESSION_HISTORY[(CHAT_A, "sess1")]
+        assert usage is not None
         assert usage["total_cost_usd"] == 0.15
 
     def test_trims_old_sessions(self):

@@ -206,6 +206,7 @@ def test_exit_plan_mode_not_auto_approved() -> None:
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
 
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.kind == "warning"
     assert "req-epm" not in state.auto_approve_queue
 
@@ -397,7 +398,7 @@ async def test_drain_auto_approve_uses_provided_stdin() -> None:
     await runner._drain_auto_approve(state, stdin=provided)
 
     provided.send.assert_awaited_once()
-    runner._proc_stdin.send.assert_not_awaited()
+    runner._proc_stdin.send.assert_not_awaited()  # type: ignore[union-attr]
     assert state.auto_approve_queue == []
 
 
@@ -412,7 +413,7 @@ async def test_drain_auto_approve_falls_back_to_proc_stdin() -> None:
 
     await runner._drain_auto_approve(state)
 
-    assert runner._proc_stdin.send.await_count == 2
+    assert runner._proc_stdin.send.await_count == 2  # type: ignore[union-attr]
     assert state.auto_approve_queue == []
 
 
@@ -448,6 +449,7 @@ def test_control_action_lifecycle_tool_use_to_result() -> None:
         tool_use_evt, title="claude", state=state, factory=factory
     )
     assert len(events_1) == 1
+    assert isinstance(events_1[0], ActionEvent)
     assert events_1[0].phase == "started"
     assert state.last_tool_use_id == "toolu_lifecycle"
 
@@ -467,6 +469,7 @@ def test_control_action_lifecycle_tool_use_to_result() -> None:
         control_evt, title="claude", state=state, factory=factory
     )
     assert len(events_2) == 1
+    assert isinstance(events_2[0], ActionEvent)
     assert events_2[0].action.kind == "warning"
 
     # Verify mapping
@@ -499,9 +502,11 @@ def test_control_action_lifecycle_tool_use_to_result() -> None:
     tool_result = events_3[0]
     control_resolved = events_3[1]
 
+    assert isinstance(tool_result, ActionEvent)
     assert tool_result.phase == "completed"
     assert tool_result.action.id == "toolu_lifecycle"
 
+    assert isinstance(control_resolved, ActionEvent)
     assert control_resolved.phase == "completed"
     assert control_resolved.action.id == control_action_id
     assert control_resolved.action.kind == "warning"
@@ -600,14 +605,14 @@ async def test_discuss_action_sends_deny_with_custom_message() -> None:
         command="claude_control",
         text="claude_control:discuss:req-discuss",
         args_text="discuss:req-discuss",
-        args=["discuss:req-discuss"],
+        args=("discuss:req-discuss",),
         message=MessageRef(channel_id=123, message_id=1),
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,
-        runtime=None,
-        executor=None,
+        plugin_config=None,  # type: ignore[arg-type]
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
     )
 
     cmd = ClaudeControlCommand()
@@ -719,6 +724,7 @@ def test_exit_plan_mode_auto_denied_during_cooldown() -> None:
     # Synthetic Approve/Deny buttons returned as ActionEvent
     assert len(events) == 1
     evt = events[0]
+    assert isinstance(evt, ActionEvent)
     assert evt.action.kind == "warning"
     assert "approve to proceed" in evt.action.title.lower()
     assert evt.action.detail["request_id"] == "da:sess-cooldown"
@@ -756,6 +762,7 @@ def test_exit_plan_mode_not_auto_denied_after_cooldown_expires() -> None:
 
     # Should produce a normal approval-required event (not auto-denied)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.kind == "warning"
     assert state.auto_deny_queue == []
 
@@ -817,14 +824,14 @@ async def test_discuss_handler_sets_cooldown() -> None:
         command="claude_control",
         text="claude_control:discuss:req-discuss-cd",
         args_text="discuss:req-discuss-cd",
-        args=["discuss:req-discuss-cd"],
+        args=("discuss:req-discuss-cd",),
         message=MessageRef(channel_id=123, message_id=1),
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,
-        runtime=None,
-        executor=None,
+        plugin_config=None,  # type: ignore[arg-type]
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
     )
 
     cmd = ClaudeControlCommand()
@@ -859,14 +866,14 @@ async def test_approve_handler_clears_cooldown() -> None:
         command="claude_control",
         text="claude_control:approve:req-approve-cd",
         args_text="approve:req-approve-cd",
-        args=["approve:req-approve-cd"],
+        args=("approve:req-approve-cd",),
         message=MessageRef(channel_id=123, message_id=1),
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,
-        runtime=None,
-        executor=None,
+        plugin_config=None,  # type: ignore[arg-type]
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
     )
 
     cmd = ClaudeControlCommand()
@@ -974,6 +981,7 @@ def test_exit_plan_mode_not_auto_approved_in_plan_mode() -> None:
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
 
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.kind == "warning"
     assert "req-plan-epm" not in state.auto_approve_queue
 
