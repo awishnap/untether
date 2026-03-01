@@ -26,6 +26,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 - **Compact startup message** — version number, conditional diagnostics (only shows mode/topics/triggers/engines when they carry signal), project count instead of full list
 - **Model/mode footer** — final messages show model name + permission mode (e.g. `🏷 sonnet · plan`) from `StartedEvent.meta`; all 4 engines populate model info
 - **`/verbose`** — toggle verbose progress mode per chat; shows tool details (file paths, commands, patterns) in progress messages
+- **`/config`** — inline settings menu with navigable sub-pages; toggle plan mode, verbose, engine, trigger via buttons
 - **`[progress]` config** — global verbosity and max_actions settings in `untether.toml`
 - **Pi context compaction** — `AutoCompactionStart`/`AutoCompactionEnd` events rendered as progress actions
 
@@ -60,6 +61,7 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencod
 | `commands/browse.py` | `/browse` file browser |
 | `commands/restart.py` | `/restart` graceful restart command |
 | `commands/verbose.py` | `/verbose` toggle command |
+| `commands/config.py` | `/config` inline settings menu |
 | `shutdown.py` | Graceful shutdown state and drain logic |
 | `telegram/bridge.py` | Telegram message rendering |
 | `telegram/loop.py` | Telegram update loop, signal handlers, drain-then-exit |
@@ -124,7 +126,7 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 
 ## Tests
 
-956 tests, 80% coverage threshold. Key test files:
+1047 tests, 80% coverage threshold. Key test files:
 
 - `test_claude_control.py` — 56 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
 - `test_callback_dispatch.py` — 28 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
@@ -142,6 +144,7 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 - `test_cooldown_bypass.py` — 3 tests: outline bypass, rapid retry auto-deny, no-text auto-deny
 - `test_verbose_progress.py` — 18 tests: format_verbose_detail() for each tool type, MarkdownFormatter verbose mode, compact regression
 - `test_verbose_command.py` — 8 tests: /verbose toggle on/off/clear, backend id
+- `test_config_command.py` — 98 tests: home page, plan mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility
 - `test_pi_compaction.py` — 7 tests: compaction start/end, aborted, no tokens, sequence
 
 ## Development

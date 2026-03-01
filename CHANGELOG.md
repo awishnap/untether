@@ -1,5 +1,42 @@
 # changelog
 
+## v0.27.0 (2026-03-01)
+
+### fixes
+
+- per-chat outbox pacing — progress edits to different chats no longer serialise through a single global timer; each chat tracks its own rate-limit window independently [#48](https://github.com/littlebearapps/untether/issues/48)
+  - `_next_at[chat_id]` dict replaces scalar `next_at`
+  - new `_pick_ready(now)` selects from unblocked chats; `retry_at` stays global (429)
+  - 7 group chats now update in parallel (~0s total) vs old 7 × 3s = 21s delay
+
+### changes
+
+- `/config` model sub-page — view current model override and clear it; button always visible on home page [#47](https://github.com/littlebearapps/untether/issues/47)
+- `/config` reasoning sub-page — select reasoning level (minimal/low/medium/high/xhigh) via buttons; only visible when engine supports reasoning (Codex) [#47](https://github.com/littlebearapps/untether/issues/47)
+
+### tests
+
+- 7 per-chat pacing tests: independent chats, private vs group intervals, global retry_at, cross-chat priority, same-chat pacing, 7 concurrent chats, chat_id=None independence
+- 54 model + reasoning /config tests: sub-page rendering, toggle actions, engine-aware visibility, toast mappings, override persistence, cross-field preservation
+
+## v0.26.0 (2026-03-01)
+
+### changes
+
+- `/config` inline settings menu — BotFather-style inline keyboard for toggling plan mode, verbose, engine, and trigger; edits message in-place [#47](https://github.com/littlebearapps/untether/issues/47)
+  - confirmation toasts on toggle actions (e.g. "Plan mode: off")
+  - auto-return to home page after setting changes
+  - engine-aware plan mode — hidden for non-Claude engines
+
+### docs
+
+- comprehensive tutorials and how-to guides — 15 new/expanded guides covering daily use, interactive control, messaging, cost management, security, and operations
+- inline settings how-to (`docs/how-to/inline-settings.md`)
+
+### tests
+
+- add 62-test suite for `/config` (toast permutations, engine-aware visibility, auto-return, callback dispatch)
+
 ## v0.25.3 (2026-03-01)
 
 ### fixes
