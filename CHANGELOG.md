@@ -1,5 +1,21 @@
 # changelog
 
+## v0.25.2 (2026-03-01)
+
+### fixes
+
+- add actionable error hints for SIGTERM/SIGKILL/SIGABRT signals — users now see recovery guidance instead of raw exit codes [#44](https://github.com/littlebearapps/untether/issues/44)
+
+### docs
+
+- add `contrib/untether.service` example with `KillMode=process` and `TimeoutStopSec=150` for graceful shutdown [#44](https://github.com/littlebearapps/untether/issues/44)
+- update `docs/reference/dev-instance.md` with systemd configuration section and graceful upgrade path
+- update `CLAUDE.md` with graceful upgrade comment
+
+### tests
+
+- add 5 signal hint tests (SIGTERM, SIGKILL, SIGABRT, case insensitivity, no false positives)
+
 ## v0.25.1 (2026-03-01)
 
 ### changes
