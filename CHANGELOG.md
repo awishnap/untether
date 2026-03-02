@@ -1,5 +1,18 @@
 # changelog
 
+## v0.27.1 (2026-03-02)
+
+### fixes
+
+- add ReadTimeout error hint for transient network timeouts [#15](https://github.com/littlebearapps/untether/issues/15)
+- resolve all ty type checker warnings (109 → 0)
+
+### docs
+
+- fix PyPI logo rendering — use absolute raw GitHub URL so SVG displays on PyPI
+- add Upgrading section to README with uv/pipx upgrade + restart commands
+- point project URLs to GitHub for PyPI verified details
+
 ## v0.27.0 (2026-03-01)
 
 ### fixes

@@ -37,6 +37,11 @@ class TestGetErrorHint:
         assert hint is not None
         assert "running" in hint.lower()
 
+    def test_read_timeout(self):
+        hint = get_error_hint("ReadTimeout")
+        assert hint is not None
+        assert "timed out" in hint.lower()
+
     def test_unknown_error_returns_none(self):
         assert get_error_hint("Something completely unexpected happened") is None
 
