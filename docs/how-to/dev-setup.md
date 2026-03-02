@@ -112,11 +112,11 @@ Only after code is merged and released to PyPI:
 ```bash
 # Option 1: graceful upgrade (recommended)
 # Send /restart in Telegram first, wait for drain, then:
-pipx upgrade untether
+uv tool upgrade untether       # or: pipx upgrade untether
 systemctl --user restart untether
 
 # Option 2: direct upgrade
-pipx upgrade untether && systemctl --user restart untether
+uv tool upgrade untether && systemctl --user restart untether
 ```
 
 !!! note "Graceful restart"

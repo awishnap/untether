@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/untether-logo-full.svg" height="200" alt="Untether" />
+  <img src="https://raw.githubusercontent.com/littlebearapps/untether/master/docs/assets/untether-logo-full.svg" height="200" alt="Untether" />
 </p>
 
 <p align="center">
@@ -47,6 +47,24 @@ The wizard creates a Telegram bot, picks your workflow, and connects your chat. 
 That's it. Your agent runs on your machine, streams progress to Telegram, and you can reply to continue the conversation.
 
 **Tip:** Already have a bot token? Pass it directly: `untether --bot-token YOUR_TOKEN`
+
+---
+
+## 🔄 Upgrading
+
+```sh
+uv tool upgrade untether        # if installed with uv
+# or
+pipx upgrade untether            # if installed with pipx
+```
+
+Then restart to apply:
+
+```sh
+/restart                         # from Telegram (preferred — drains active runs first)
+# or
+systemctl --user restart untether  # from shell (systemd)
+```
 
 ---
 

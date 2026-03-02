@@ -5,7 +5,7 @@ maintainers = [{name = "Little Bear Apps", email = "hello@littlebearapps.com"}]
 version = "0.27.0"
 keywords = ["telegram", "claude-code", "codex", "opencode", "pi", "ai-agents", "coding-assistant", "remote-control", "cli-bridge"]
 description = "Run AI coding agents from your phone. Bridges Claude Code, Codex, OpenCode, and Pi to Telegram with interactive permissions, voice notes, and live progress."
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"

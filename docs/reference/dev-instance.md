@@ -40,11 +40,11 @@ journalctl --user -u untether -f          # Tail prod logs
 # --- Upgrade production after a PyPI release ---
 # Option A: graceful (waits for active runs to finish)
 # Send /restart in Telegram, wait for drain, then:
-pipx upgrade untether
+uv tool upgrade untether       # or: pipx upgrade untether
 systemctl --user restart untether
 
 # Option B: immediate (interrupts active runs)
-pipx upgrade untether
+uv tool upgrade untether       # or: pipx upgrade untether
 systemctl --user restart untether
 
 # --- Check both ---
@@ -62,7 +62,7 @@ systemctl --user status untether untether-dev
 3. Test via `@untether_dev_bot` in Telegram
 4. Run tests: `uv run pytest`
 5. When satisfied: commit, push, release to PyPI
-6. Upgrade production: `pipx upgrade untether && systemctl --user restart untether`
+6. Upgrade production: `uv tool upgrade untether && systemctl --user restart untether`
 
 ## Config files
 
