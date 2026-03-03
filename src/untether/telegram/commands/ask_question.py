@@ -84,11 +84,12 @@ class AskQuestionCommand:
                 # All questions answered — send structured response
                 success = await answer_ask_question_with_options(flow.request_id)
                 if success:
-                    answers_summary = ", ".join(
-                        f"{k}: {v}" for k, v in flow.answers.items()
-                    )
+                    answer_lines = []
+                    for question, answer in flow.answers.items():
+                        answer_lines.append(f"Q: {question}\nA: {answer}")
+                    answers_summary = "\n\n".join(answer_lines)
                     return CommandResult(
-                        text=f"Answers sent: {answers_summary}",
+                        text=f"Answers sent:\n\n{answers_summary}",
                         notify=True,
                     )
                 return CommandResult(
