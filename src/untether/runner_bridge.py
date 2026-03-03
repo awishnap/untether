@@ -541,11 +541,15 @@ class ProgressEdits:
             try:
                 if has_approval and not had_approval and not self._approval_notified:
                     self._approval_notified = True
+                    # Contextual notification text
+                    notify_text = "Action required \u2014 approval needed"
+                    for a in state.actions:
+                        if not a.completed and a.action.detail.get("ask_question"):
+                            notify_text = "Question from Claude"
+                            break
                     self._approval_notify_ref = await self.transport.send(
                         channel_id=self.channel_id,
-                        message=RenderedMessage(
-                            text="Action required \u2014 approval needed"
-                        ),
+                        message=RenderedMessage(text=notify_text),
                         options=SendOptions(
                             notify=True,
                             reply_to=self.progress_ref,

@@ -16,11 +16,14 @@
 ### fixes
 
 - deduplicate error messages when answer and error share the same first line (e.g. Claude subscription limits showed "You're out of extra usage" twice) [#55](https://github.com/littlebearapps/untether/issues/55)
+- remove Approve/Deny buttons from AskUserQuestion option keyboards — only option buttons and "Other (type reply)" shown [#56](https://github.com/littlebearapps/untether/issues/56)
+- push notification for AskUserQuestion now says "Question from Claude" instead of "Action required — approval needed" [#57](https://github.com/littlebearapps/untether/issues/57)
 
 ### tests
 
 - 19 new tests for API error hint patterns: subscription limits, billing, overload, server errors, network, ordering
 - 2 new tests for error/answer deduplication in runner_bridge [#55](https://github.com/littlebearapps/untether/issues/55)
+- negative assertions for Approve/Deny absence in option button test [#56](https://github.com/littlebearapps/untether/issues/56)
 
 ## v0.28.0 (2026-03-02)
 

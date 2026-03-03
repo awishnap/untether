@@ -843,7 +843,8 @@ def translate_claude_event(
                                 questions=questions_list,
                             )
                             _ASK_QUESTION_FLOWS[request_id] = flow
-                            # Add option buttons
+                            # Replace Approve/Deny with option buttons
+                            button_rows.clear()
                             for i, opt in enumerate(options[:4]):
                                 label = opt.get("label", f"Option {i + 1}")
                                 # Truncate label to fit 64-byte callback limit

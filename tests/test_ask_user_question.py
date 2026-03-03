@@ -315,6 +315,9 @@ def test_ask_question_with_options_renders_buttons() -> None:
     assert "PostgreSQL" in button_texts
     assert "MongoDB" in button_texts
     assert "Other (type reply)" in button_texts
+    # Approve/Deny must NOT appear alongside option buttons
+    assert "Approve" not in button_texts
+    assert "Deny" not in button_texts
 
 
 def test_ask_question_with_options_creates_flow() -> None:
