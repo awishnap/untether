@@ -46,6 +46,7 @@ def _check(label: str, *, active: bool) -> str:
 async def _page_home(ctx: CommandContext) -> None:
     from ..chat_prefs import ChatPrefsStore, resolve_prefs_path
     from ..engine_overrides import (
+        API_COST_SUPPORTED_ENGINES,
         ASK_QUESTIONS_SUPPORTED_ENGINES,
         DIFF_PREVIEW_SUPPORTED_ENGINES,
         SUBSCRIPTION_USAGE_SUPPORTED_ENGINES,
@@ -64,8 +65,7 @@ async def _page_home(ctx: CommandContext) -> None:
     reasoning_label = "default"
     aq_label = "default"
     dp_label = "default"
-    ac_label = "default"
-    su_label = "default"
+    cu_label = "default"
 
     if config_path is not None:
         prefs = ChatPrefsStore(resolve_prefs_path(config_path))
@@ -104,13 +104,17 @@ async def _page_home(ctx: CommandContext) -> None:
         if engine_override and engine_override.diff_preview is not None:
             dp_label = "on" if engine_override.diff_preview else "off"
 
-        # API cost override for current engine
-        if engine_override and engine_override.show_api_cost is not None:
-            ac_label = "on" if engine_override.show_api_cost else "off"
-
-        # Subscription usage override for current engine
-        if engine_override and engine_override.show_subscription_usage is not None:
-            su_label = "on" if engine_override.show_subscription_usage else "off"
+        # Cost & usage — summarise both toggles
+        if engine_override:
+            _ac = engine_override.show_api_cost
+            _su = engine_override.show_subscription_usage
+            if _ac is not None or _su is not None:
+                parts = []
+                if _ac is not None:
+                    parts.append(f"cost {'on' if _ac else 'off'}")
+                if _su is not None:
+                    parts.append(f"sub {'on' if _su else 'off'}")
+                cu_label = ", ".join(parts)
 
     verbose = get_verbosity_override(chat_id)
     if verbose == "verbose":
@@ -124,7 +128,10 @@ async def _page_home(ctx: CommandContext) -> None:
     show_reasoning = supports_reasoning(current_engine)
     show_ask_questions = current_engine in ASK_QUESTIONS_SUPPORTED_ENGINES
     show_diff_preview = current_engine in DIFF_PREVIEW_SUPPORTED_ENGINES
-    show_subscription_usage = current_engine in SUBSCRIPTION_USAGE_SUPPORTED_ENGINES
+    show_cost_usage = (
+        current_engine in API_COST_SUPPORTED_ENGINES
+        or current_engine in SUBSCRIPTION_USAGE_SUPPORTED_ENGINES
+    )
 
     lines = [
         "<b>⚙️ Settings</b>",
@@ -136,9 +143,8 @@ async def _page_home(ctx: CommandContext) -> None:
         lines.append(f"Ask mode: <b>{aq_label}</b>")
     if show_diff_preview:
         lines.append(f"Diff preview: <b>{dp_label}</b>")
-    lines.append(f"API cost: <b>{ac_label}</b>")
-    if show_subscription_usage:
-        lines.append(f"Sub usage: <b>{su_label}</b>")
+    if show_cost_usage:
+        lines.append(f"Cost & usage: <b>{cu_label}</b>")
     lines.extend(
         [
             f"Verbose: <b>{verbose_label}</b>",
@@ -153,7 +159,7 @@ async def _page_home(ctx: CommandContext) -> None:
     buttons: list[list[dict[str, str]]] = []
 
     if show_plan_mode:
-        # Claude layout: 5 rows
+        # Claude layout
         buttons.append(
             [
                 {"text": "Plan mode", "callback_data": "config:pm"},
@@ -165,10 +171,8 @@ async def _page_home(ctx: CommandContext) -> None:
             row2.append({"text": "Diff preview", "callback_data": "config:dp"})
         row2.append({"text": "Verbose", "callback_data": "config:vb"})
         buttons.append(row2)
-        row3 = [{"text": "API cost", "callback_data": "config:ac"}]
-        if show_subscription_usage:
-            row3.append({"text": "Sub usage", "callback_data": "config:su"})
-        buttons.append(row3)
+        if show_cost_usage:
+            buttons.append([{"text": "Cost & usage", "callback_data": "config:cu"}])
         buttons.append(
             [
                 {"text": "Model", "callback_data": "config:md"},
@@ -177,48 +181,27 @@ async def _page_home(ctx: CommandContext) -> None:
         )
         buttons.append(
             [
-                {"text": "Trigger", "callback_data": "config:tr"},
-            ]
-        )
-    elif show_reasoning:
-        # Codex layout
-        buttons.append(
-            [
-                {"text": "API cost", "callback_data": "config:ac"},
-                {"text": "Verbose", "callback_data": "config:vb"},
-            ]
-        )
-        buttons.append(
-            [
-                {"text": "Model", "callback_data": "config:md"},
-                {"text": "Engine", "callback_data": "config:ag"},
-            ]
-        )
-        buttons.append(
-            [
-                {"text": "Reasoning", "callback_data": "config:rs"},
                 {"text": "Trigger", "callback_data": "config:tr"},
             ]
         )
     else:
-        # Other engines
+        # Non-Claude engines
+        if show_cost_usage:
+            buttons.append([{"text": "Cost & usage", "callback_data": "config:cu"}])
         buttons.append(
             [
-                {"text": "API cost", "callback_data": "config:ac"},
                 {"text": "Verbose", "callback_data": "config:vb"},
-            ]
-        )
-        buttons.append(
-            [
                 {"text": "Model", "callback_data": "config:md"},
-                {"text": "Engine", "callback_data": "config:ag"},
             ]
         )
         buttons.append(
             [
+                {"text": "Engine", "callback_data": "config:ag"},
                 {"text": "Trigger", "callback_data": "config:tr"},
             ]
         )
+        if show_reasoning:
+            buttons.append([{"text": "Reasoning", "callback_data": "config:rs"}])
 
     await _respond(ctx, "\n".join(lines), buttons)
 
@@ -987,130 +970,14 @@ async def _page_diff_preview(ctx: CommandContext, action: str | None = None) -> 
 
 
 # ---------------------------------------------------------------------------
-# API cost
+# Cost & usage (merged API cost + subscription usage)
 # ---------------------------------------------------------------------------
 
 
-async def _page_api_cost(ctx: CommandContext, action: str | None = None) -> None:
-    from ..chat_prefs import ChatPrefsStore, resolve_prefs_path
-    from ..engine_overrides import EngineOverrides
-
-    config_path = ctx.config_path
-    if config_path is None:
-        await _respond(
-            ctx,
-            "<b>⚙️ API cost</b>\n\nUnavailable (no config path).",
-            [[{"text": "← Back", "callback_data": "config:home"}]],
-        )
-        return
-
-    prefs = ChatPrefsStore(resolve_prefs_path(config_path))
-    chat_id = ctx.message.channel_id
-
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
-
-    if action == "on":
-        current = await prefs.get_engine_override(chat_id, current_engine)
-        updated = EngineOverrides(
-            model=current.model if current else None,
-            reasoning=current.reasoning if current else None,
-            permission_mode=current.permission_mode if current else None,
-            ask_questions=current.ask_questions if current else None,
-            diff_preview=current.diff_preview if current else None,
-            show_api_cost=True,
-            show_subscription_usage=current.show_subscription_usage
-            if current
-            else None,
-        )
-        await prefs.set_engine_override(chat_id, current_engine, updated)
-        logger.info("config.api_cost.set", chat_id=chat_id, value=True)
-        await _page_home(ctx)
-        return
-    elif action == "off":
-        current = await prefs.get_engine_override(chat_id, current_engine)
-        updated = EngineOverrides(
-            model=current.model if current else None,
-            reasoning=current.reasoning if current else None,
-            permission_mode=current.permission_mode if current else None,
-            ask_questions=current.ask_questions if current else None,
-            diff_preview=current.diff_preview if current else None,
-            show_api_cost=False,
-            show_subscription_usage=current.show_subscription_usage
-            if current
-            else None,
-        )
-        await prefs.set_engine_override(chat_id, current_engine, updated)
-        logger.info("config.api_cost.set", chat_id=chat_id, value=False)
-        await _page_home(ctx)
-        return
-    elif action == "clr":
-        current = await prefs.get_engine_override(chat_id, current_engine)
-        updated = EngineOverrides(
-            model=current.model if current else None,
-            reasoning=current.reasoning if current else None,
-            permission_mode=current.permission_mode if current else None,
-            ask_questions=current.ask_questions if current else None,
-            diff_preview=current.diff_preview if current else None,
-            show_api_cost=None,
-            show_subscription_usage=current.show_subscription_usage
-            if current
-            else None,
-        )
-        await prefs.set_engine_override(chat_id, current_engine, updated)
-        logger.info("config.api_cost.cleared", chat_id=chat_id)
-        await _page_home(ctx)
-        return
-
-    override = await prefs.get_engine_override(chat_id, current_engine)
-    ac = override.show_api_cost if override else None
-    if ac is True:
-        current_label = "on"
-    elif ac is False:
-        current_label = "off"
-    else:
-        current_label = "default"
-
-    lines = [
-        "<b>⚙️ API cost</b>",
-        "",
-        "Shows run cost in the final message footer.",
-        "• <b>on</b> — show cost, tokens, and duration",
-        "• <b>off</b> — hide cost footer",
-        "",
-        f"Current: <b>{current_label}</b>",
-    ]
-
-    buttons = [
-        [
-            {
-                "text": _check("Off", active=ac is False),
-                "callback_data": "config:ac:off",
-            },
-            {
-                "text": _check("On", active=ac is True),
-                "callback_data": "config:ac:on",
-            },
-        ],
-        [
-            {"text": "Clear override", "callback_data": "config:ac:clr"},
-            {"text": "← Back", "callback_data": "config:home"},
-        ],
-    ]
-
-    await _respond(ctx, "\n".join(lines), buttons)
-
-
-# ---------------------------------------------------------------------------
-# Subscription usage
-# ---------------------------------------------------------------------------
-
-
-async def _page_subscription_usage(
-    ctx: CommandContext, action: str | None = None
-) -> None:
+async def _page_cost_usage(ctx: CommandContext, action: str | None = None) -> None:
     from ..chat_prefs import ChatPrefsStore, resolve_prefs_path
     from ..engine_overrides import (
+        API_COST_SUPPORTED_ENGINES,
         EngineOverrides,
         SUBSCRIPTION_USAGE_SUPPORTED_ENGINES,
     )
@@ -1119,7 +986,7 @@ async def _page_subscription_usage(
     if config_path is None:
         await _respond(
             ctx,
-            "<b>⚙️ Subscription usage</b>\n\nUnavailable (no config path).",
+            "<b>⚙️ Cost & usage</b>\n\nUnavailable (no config path).",
             [[{"text": "← Back", "callback_data": "config:home"}]],
         )
         return
@@ -1127,100 +994,116 @@ async def _page_subscription_usage(
     prefs = ChatPrefsStore(resolve_prefs_path(config_path))
     chat_id = ctx.message.channel_id
 
-    # Claude-only guard
     eng = await prefs.get_default_engine(chat_id)
     current_engine = eng if eng else ctx.runtime.default_engine
-    if current_engine not in SUBSCRIPTION_USAGE_SUPPORTED_ENGINES:
+
+    has_api_cost = current_engine in API_COST_SUPPORTED_ENGINES
+    has_sub_usage = current_engine in SUBSCRIPTION_USAGE_SUPPORTED_ENGINES
+
+    if not has_api_cost and not has_sub_usage:
         await _respond(
             ctx,
-            "<b>⚙️ Subscription usage</b>\n\nOnly available for Claude Code.",
+            (
+                "<b>⚙️ Cost & usage</b>\n\n"
+                f"Not available for <b>{current_engine}</b>.\n"
+                "API cost works with Claude and OpenCode.\n"
+                "Subscription usage works with Claude."
+            ),
             [[{"text": "← Back", "callback_data": "config:home"}]],
         )
         return
 
-    engine = current_engine
+    # --- Actions: ac_on/ac_off/ac_clr, su_on/su_off/su_clr ---
+    if action and "_" in action:
+        prefix, act = action.split("_", 1)
+        current = await prefs.get_engine_override(chat_id, current_engine)
+        ac_val = current.show_api_cost if current else None
+        su_val = current.show_subscription_usage if current else None
 
-    if action == "on":
-        current = await prefs.get_engine_override(chat_id, engine)
+        if prefix == "ac" and has_api_cost:
+            ac_val = {"on": True, "off": False, "clr": None}[act]
+            logger.info("config.api_cost.set", chat_id=chat_id, value=ac_val)
+        elif prefix == "su" and has_sub_usage:
+            su_val = {"on": True, "off": False, "clr": None}[act]
+            logger.info("config.subscription_usage.set", chat_id=chat_id, value=su_val)
+
         updated = EngineOverrides(
             model=current.model if current else None,
             reasoning=current.reasoning if current else None,
             permission_mode=current.permission_mode if current else None,
             ask_questions=current.ask_questions if current else None,
             diff_preview=current.diff_preview if current else None,
-            show_api_cost=current.show_api_cost if current else None,
-            show_subscription_usage=True,
+            show_api_cost=ac_val,
+            show_subscription_usage=su_val,
         )
-        await prefs.set_engine_override(chat_id, engine, updated)
-        logger.info("config.subscription_usage.set", chat_id=chat_id, value=True)
-        await _page_home(ctx)
-        return
-    elif action == "off":
-        current = await prefs.get_engine_override(chat_id, engine)
-        updated = EngineOverrides(
-            model=current.model if current else None,
-            reasoning=current.reasoning if current else None,
-            permission_mode=current.permission_mode if current else None,
-            ask_questions=current.ask_questions if current else None,
-            diff_preview=current.diff_preview if current else None,
-            show_api_cost=current.show_api_cost if current else None,
-            show_subscription_usage=False,
-        )
-        await prefs.set_engine_override(chat_id, engine, updated)
-        logger.info("config.subscription_usage.set", chat_id=chat_id, value=False)
-        await _page_home(ctx)
-        return
-    elif action == "clr":
-        current = await prefs.get_engine_override(chat_id, engine)
-        updated = EngineOverrides(
-            model=current.model if current else None,
-            reasoning=current.reasoning if current else None,
-            permission_mode=current.permission_mode if current else None,
-            ask_questions=current.ask_questions if current else None,
-            diff_preview=current.diff_preview if current else None,
-            show_api_cost=current.show_api_cost if current else None,
-            show_subscription_usage=None,
-        )
-        await prefs.set_engine_override(chat_id, engine, updated)
-        logger.info("config.subscription_usage.cleared", chat_id=chat_id)
-        await _page_home(ctx)
+        await prefs.set_engine_override(chat_id, current_engine, updated)
+        await _page_cost_usage(ctx)
         return
 
-    override = await prefs.get_engine_override(chat_id, engine)
+    # --- Display ---
+    override = await prefs.get_engine_override(chat_id, current_engine)
+    ac = override.show_api_cost if override else None
     su = override.show_subscription_usage if override else None
-    if su is True:
-        current_label = "on"
-    elif su is False:
-        current_label = "off"
-    else:
-        current_label = "default"
 
     lines = [
-        "<b>⚙️ Subscription usage</b>",
+        "<b>⚙️ Cost & usage</b>",
         "",
-        "Shows Claude subscription usage in the message footer.",
-        "• <b>on</b> — always show 5h/weekly usage",
-        "• <b>off</b> — only show when approaching limits",
-        "",
-        f"Current: <b>{current_label}</b>",
     ]
 
-    buttons = [
-        [
-            {
-                "text": _check("Off", active=su is False),
-                "callback_data": "config:su:off",
-            },
-            {
-                "text": _check("On", active=su is True),
-                "callback_data": "config:su:on",
-            },
-        ],
-        [
-            {"text": "Clear override", "callback_data": "config:su:clr"},
-            {"text": "← Back", "callback_data": "config:home"},
-        ],
-    ]
+    if has_api_cost:
+        ac_label = "on" if ac is True else ("off" if ac is False else "default")
+        lines.append(f"<b>API cost</b>: {ac_label}")
+        lines.append("  Show run cost, tokens, and duration in the footer.")
+        engines = "Claude, OpenCode"
+        lines.append(f"  Works with: {engines}")
+        lines.append("")
+
+    if has_sub_usage:
+        su_label = "on" if su is True else ("off" if su is False else "default")
+        lines.append(f"<b>Subscription usage</b>: {su_label}")
+        lines.append("  Show 5h/weekly subscription quota in the footer.")
+        lines.append("  Works with: Claude (Pro/Max plans)")
+        lines.append("")
+
+    buttons: list[list[dict[str, str]]] = []
+
+    if has_api_cost:
+        buttons.append(
+            [
+                {
+                    "text": _check("Cost off", active=ac is False),
+                    "callback_data": "config:cu:ac_off",
+                },
+                {
+                    "text": _check("Cost on", active=ac is True),
+                    "callback_data": "config:cu:ac_on",
+                },
+                {
+                    "text": "Clear",
+                    "callback_data": "config:cu:ac_clr",
+                },
+            ]
+        )
+
+    if has_sub_usage:
+        buttons.append(
+            [
+                {
+                    "text": _check("Sub off", active=su is False),
+                    "callback_data": "config:cu:su_off",
+                },
+                {
+                    "text": _check("Sub on", active=su is True),
+                    "callback_data": "config:cu:su_on",
+                },
+                {
+                    "text": "Clear",
+                    "callback_data": "config:cu:su_clr",
+                },
+            ]
+        )
+
+    buttons.append([{"text": "← Back", "callback_data": "config:home"}])
 
     await _respond(ctx, "\n".join(lines), buttons)
 
@@ -1238,8 +1121,7 @@ _PAGES: dict[str, object] = {
     "rs": _page_reasoning,
     "aq": _page_ask_questions,
     "dp": _page_diff_preview,
-    "ac": _page_api_cost,
-    "su": _page_subscription_usage,
+    "cu": _page_cost_usage,
 }
 
 
@@ -1297,15 +1179,13 @@ class ConfigCommand:
                 "off": "Diff preview: off",
                 "clr": "Diff preview: cleared",
             },
-            "ac": {
-                "on": "API cost: on",
-                "off": "API cost: off",
-                "clr": "API cost: cleared",
-            },
-            "su": {
-                "on": "Sub usage: on",
-                "off": "Sub usage: off",
-                "clr": "Sub usage: cleared",
+            "cu": {
+                "ac_on": "API cost: on",
+                "ac_off": "API cost: off",
+                "ac_clr": "API cost: cleared",
+                "su_on": "Sub usage: on",
+                "su_off": "Sub usage: off",
+                "su_clr": "Sub usage: cleared",
             },
         }
         page_labels = _TOAST_LABELS.get(page, {})

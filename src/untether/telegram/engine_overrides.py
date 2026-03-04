@@ -17,6 +17,8 @@ DIFF_PREVIEW_SUPPORTED_ENGINES = frozenset({"claude"})
 
 SUBSCRIPTION_USAGE_SUPPORTED_ENGINES = frozenset({"claude"})
 
+API_COST_SUPPORTED_ENGINES = frozenset({"claude", "opencode"})
+
 
 class EngineOverrides(msgspec.Struct, forbid_unknown_fields=False):
     model: str | None = None
