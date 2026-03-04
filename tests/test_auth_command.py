@@ -95,6 +95,7 @@ async def test_auth_no_args_shows_codex_info() -> None:
     result = await cmd.handle(FakeCtx())
     assert "/auth codex" in result.text
     assert "Only Codex" in result.text
+    assert "terminal" in result.text
 
 
 @pytest.mark.anyio

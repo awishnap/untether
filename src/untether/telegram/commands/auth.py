@@ -1,8 +1,7 @@
 """Command backend for headless Codex re-authentication via Telegram.
 
-Only Codex supports device auth (codex login --device-auth). Claude Code,
-OpenCode, and Pi do not have headless auth flows — use API key env vars
-or copy auth.json for those engines.
+Only Codex supports device auth (codex login --device-auth). For other
+engines, run their login command directly in the terminal.
 """
 
 from __future__ import annotations
@@ -72,9 +71,9 @@ class AuthCommand:
             return CommandResult(
                 text=(
                     "<b>/auth codex</b> \u2014 re-authenticate Codex via device code\n\n"
-                    "Only Codex supports headless device auth.\n"
-                    "Claude Code, OpenCode, and Pi use API keys or "
-                    "copied auth files for headless operation."
+                    "Only Codex supports remote device auth.\n"
+                    "For other engines, run their login command "
+                    "directly in the terminal."
                 ),
                 parse_mode="HTML",
             )
