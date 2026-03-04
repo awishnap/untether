@@ -76,6 +76,7 @@ verbose = "untether.telegram.commands.verbose:BACKEND"
 config = "untether.telegram.commands.config:BACKEND"
 hello = "untether.telegram.commands.hello:BACKEND"
 aq = "untether.telegram.commands.ask_question:BACKEND"
+stats = "untether.telegram.commands.stats:BACKEND"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]

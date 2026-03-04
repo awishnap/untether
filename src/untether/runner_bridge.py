@@ -1067,6 +1067,14 @@ async def handle_message(
         resume=resume_value,
         **usage_log,
     )
+    # Record session stats for /stats command
+    from .session_stats import record_run as _record_stats_run
+
+    _record_stats_run(
+        engine=runner.engine,
+        actions=progress_tracker.action_count,
+        duration_ms=int(elapsed * 1000),
+    )
     sync_resume_token(progress_tracker, completed.resume or outcome.resume)
     state = progress_tracker.snapshot(
         resume_formatter=runner.format_resume,

@@ -1068,6 +1068,9 @@ async def run_main_loop(
                 "chat_prefs.enabled",
                 state_path=str(resolve_prefs_path(config_path)),
             )
+            from ..session_stats import init_stats
+
+            init_stats(config_path)
         if cfg.session_mode == "chat":
             if config_path is None:
                 raise ConfigError(
