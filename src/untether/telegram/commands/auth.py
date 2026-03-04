@@ -1,4 +1,9 @@
-"""Command backend for headless engine re-authentication via Telegram."""
+"""Command backend for headless Codex re-authentication via Telegram.
+
+Only Codex supports device auth (codex login --device-auth). Claude Code,
+OpenCode, and Pi do not have headless auth flows — use API key env vars
+or copy auth.json for those engines.
+"""
 
 from __future__ import annotations
 
@@ -17,10 +22,11 @@ _CODE_RE = re.compile(r"([A-Z0-9]{4,6}-[A-Z0-9]{4,6})")
 
 _AUTH_TIMEOUT_SECONDS = 960  # 16 minutes
 
-# Supported engines and their auth commands
-_ENGINE_AUTH: dict[str, tuple[str, list[str]]] = {
-    "codex": ("codex", ["codex", "login", "--device-auth"]),
-}
+# Only Codex supports device auth. Claude Code has an open feature request
+# (anthropics/claude-code#22992) but no implementation. OpenCode and Pi
+# use API key env vars for headless operation.
+_CODEX_CLI = "codex"
+_CODEX_AUTH_ARGS = ["codex", "login", "--device-auth"]
 
 _auth_running = False
 
@@ -44,49 +50,39 @@ def parse_device_code(text: str) -> tuple[str | None, str | None]:
     )
 
 
+def codex_cli_available() -> bool:
+    """Check if the codex CLI is installed."""
+    return shutil.which(_CODEX_CLI) is not None
+
+
 class AuthCommand:
-    """Command backend for headless re-authentication."""
+    """Command backend for headless Codex re-authentication."""
 
     id = "auth"
-    description = "Re-authenticate an engine (e.g. /auth codex)"
+    description = "Re-authenticate Codex (device auth)"
 
     async def handle(self, ctx: CommandContext) -> CommandResult:
         global _auth_running
 
-        # Parse args: /auth [engine] or /auth status
         args = ctx.args
-        if not args:
+        engine = args[0].lower() if args else ""
+
+        # Only codex is supported
+        if engine != "codex":
             return CommandResult(
                 text=(
-                    "<b>Usage:</b> /auth &lt;engine&gt;\n"
-                    f"<b>Supported:</b> {', '.join(_ENGINE_AUTH.keys())}\n"
-                    "<b>Check:</b> /auth status"
+                    "<b>/auth codex</b> \u2014 re-authenticate Codex via device code\n\n"
+                    "Only Codex supports headless device auth.\n"
+                    "Claude Code, OpenCode, and Pi use API keys or "
+                    "copied auth files for headless operation."
                 ),
                 parse_mode="HTML",
             )
 
-        engine = args[0].lower()
-
-        # Status check
-        if engine == "status":
-            lines = ["<b>Auth Status</b>\n"]
-            for eng, (cli_cmd, _) in _ENGINE_AUTH.items():
-                available = shutil.which(cli_cmd) is not None
-                status = "\u2705 installed" if available else "\u274c not found"
-                lines.append(f"<b>{eng}</b>: {status}")
-            return CommandResult(text="\n".join(lines), parse_mode="HTML")
-
-        if engine not in _ENGINE_AUTH:
-            return CommandResult(
-                text=f"\u274c Unknown engine: {engine}. Supported: {', '.join(_ENGINE_AUTH.keys())}",
-            )
-
-        cli_cmd, auth_args = _ENGINE_AUTH[engine]
-
         # Check CLI availability
-        if shutil.which(cli_cmd) is None:
+        if not codex_cli_available():
             return CommandResult(
-                text=f"\u274c <code>{cli_cmd}</code> not found in PATH",
+                text="\u274c <code>codex</code> not found in PATH",
                 parse_mode="HTML",
             )
 
@@ -96,11 +92,10 @@ class AuthCommand:
 
         _auth_running = True
         try:
-            # Send initial message
-            await ctx.executor.send(f"\U0001f510 Starting {engine} device auth\u2026")
+            await ctx.executor.send("\U0001f510 Starting Codex device auth\u2026")
 
             proc = await asyncio.create_subprocess_exec(
-                *auth_args,
+                *_CODEX_AUTH_ARGS,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 stdin=asyncio.subprocess.DEVNULL,
@@ -140,11 +135,16 @@ class AuthCommand:
                         if found_code:
                             code = found_code
 
-                        # Send device code message as soon as we have both
+                        # Send device code message with security warning
                         if url and code:
                             await ctx.executor.send(
-                                f"\U0001f517 Visit: {url}\n"
-                                f"\U0001f511 Code: <code>{code}</code>",
+                                f"\U0001f517 Open this link and sign in:\n"
+                                f"{url}\n\n"
+                                f"\U0001f511 Enter this one-time code:\n"
+                                f"<code>{code}</code>\n\n"
+                                f"\u26a0\ufe0f <b>Security:</b> Device codes are a "
+                                f"common phishing target. Never share this code "
+                                f"with anyone. It expires in 15 minutes.",
                             )
 
                 rc = await proc.wait()
@@ -154,14 +154,12 @@ class AuthCommand:
                 raise
 
             if rc == 0:
-                return CommandResult(
-                    text=f"\u2705 {engine} auth completed successfully"
-                )
+                return CommandResult(text="\u2705 Codex auth completed successfully")
             else:
                 excerpt = "\n".join(output_lines[-5:]) if output_lines else "no output"
                 return CommandResult(
                     text=(
-                        f"\u274c {engine} auth failed (exit code {rc})\n"
+                        f"\u274c Codex auth failed (exit code {rc})\n"
                         f"<pre>{excerpt}</pre>"
                     ),
                     parse_mode="HTML",

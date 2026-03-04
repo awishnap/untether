@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import shutil
 import time
 
 from ...commands import CommandBackend, CommandContext, CommandResult
@@ -80,23 +83,123 @@ def format_stats_message(
     return "\n".join(lines)
 
 
+async def _check_engine_auth(cli: str, args: list[str]) -> str | None:
+    """Run an engine's auth status command. Returns status text or None."""
+    if shutil.which(cli) is None:
+        return None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            stdin=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        return stdout.decode("utf-8", errors="replace").strip() if stdout else None
+    except (TimeoutError, OSError):
+        return None
+
+
+async def get_auth_status() -> list[str]:
+    """Get auth status for all known engines."""
+    lines: list[str] = []
+
+    # Claude Code
+    raw = await _check_engine_auth("claude", ["claude", "auth", "status", "--json"])
+    if raw:
+        try:
+            data = json.loads(raw)
+            if data.get("loggedIn"):
+                method = data.get("authMethod", "unknown")
+                lines.append(f"<b>claude</b>: \u2705 {method}")
+            else:
+                lines.append("<b>claude</b>: \u274c not logged in")
+        except (json.JSONDecodeError, KeyError):
+            lines.append("<b>claude</b>: \u2753 unknown")
+    elif shutil.which("claude"):
+        lines.append("<b>claude</b>: \u2753 status unavailable")
+
+    # Codex
+    raw = await _check_engine_auth("codex", ["codex", "login", "status"])
+    if raw:
+        from .auth import strip_ansi
+
+        clean = strip_ansi(raw).strip()
+        if "logged in" in clean.lower():
+            # e.g. "Logged in using ChatGPT"
+            lines.append(f"<b>codex</b>: \u2705 {clean.lower()}")
+        else:
+            lines.append("<b>codex</b>: \u274c not logged in")
+    elif shutil.which("codex"):
+        lines.append("<b>codex</b>: \u2753 status unavailable")
+
+    # OpenCode — check auth file directly (CLI output uses box-drawing chars)
+    from pathlib import Path
+
+    oc_auth = Path.home() / ".local" / "share" / "opencode" / "auth.json"
+    if shutil.which("opencode"):
+        if oc_auth.exists():
+            try:
+                data = json.loads(oc_auth.read_text(encoding="utf-8"))
+                providers = [k for k in data if data[k]]
+                if providers:
+                    lines.append(
+                        f"<b>opencode</b>: \u2705 {len(providers)} provider(s)"
+                    )
+                else:
+                    lines.append("<b>opencode</b>: \u274c no credentials")
+            except (json.JSONDecodeError, OSError):
+                lines.append("<b>opencode</b>: \u2753 unknown")
+        else:
+            lines.append("<b>opencode</b>: \u274c no credentials")
+
+    # Pi — check auth file
+    pi_auth = Path.home() / ".pi" / "agent" / "auth.json"
+    if shutil.which("pi"):
+        if pi_auth.exists():
+            try:
+                data = json.loads(pi_auth.read_text(encoding="utf-8"))
+                providers = [k for k in data if data[k]]
+                if providers:
+                    lines.append(f"<b>pi</b>: \u2705 {len(providers)} provider(s)")
+                else:
+                    lines.append("<b>pi</b>: \u274c no credentials")
+            except (json.JSONDecodeError, OSError):
+                lines.append("<b>pi</b>: \u2753 unknown")
+        else:
+            lines.append("<b>pi</b>: \u274c no credentials")
+
+    return lines
+
+
 class StatsCommand:
     """Command backend for session statistics."""
 
     id = "stats"
-    description = "Show per-engine session statistics"
+    description = "Show per-engine session statistics and auth status"
 
     async def handle(self, ctx: CommandContext) -> CommandResult:
-        # Parse args: /stats [engine] [period]
+        # Parse args: /stats [engine] [period] or /stats auth
         engine: str | None = None
         period = "today"
+        show_auth = False
 
         for arg in ctx.args:
             lower = arg.lower()
             if lower in ("today", "week", "all"):
                 period = lower
+            elif lower == "auth":
+                show_auth = True
             else:
                 engine = lower
+
+        if show_auth:
+            auth_lines = await get_auth_status()
+            if auth_lines:
+                text = "\U0001f511 <b>Auth Status</b>\n\n" + "\n".join(auth_lines)
+            else:
+                text = "\U0001f511 <b>Auth Status</b>\n\nNo engines found."
+            return CommandResult(text=text, notify=True, parse_mode="HTML")
 
         text = format_stats_message(engine=engine, period=period)
         return CommandResult(text=text, notify=True, parse_mode="HTML")

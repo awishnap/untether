@@ -184,3 +184,70 @@ def test_stats_command_id() -> None:
     cmd = StatsCommand()
     assert cmd.id == "stats"
     assert cmd.description
+
+
+# ── Auth status subcommand ────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_stats_auth_subcommand() -> None:
+    from dataclasses import dataclass
+
+    @dataclass
+    class FakeCtx:
+        command: str = "stats"
+        text: str = "/stats auth"
+        args_text: str = "auth"
+        args: tuple = ("auth",)
+        message = None
+        reply_to = None
+        reply_text = None
+        config_path = None
+        plugin_config: dict = None
+        runtime = None
+        executor = None
+
+        def __post_init__(self):
+            if self.plugin_config is None:
+                self.plugin_config = {}
+
+    cmd = StatsCommand()
+    with patch(
+        "untether.telegram.commands.stats.get_auth_status",
+        return_value=["<b>claude</b>: \u2705 api_key"],
+    ):
+        result = await cmd.handle(FakeCtx())
+    assert "Auth Status" in result.text
+    assert "claude" in result.text
+    assert result.parse_mode == "HTML"
+
+
+@pytest.mark.anyio
+async def test_stats_auth_no_engines() -> None:
+    from dataclasses import dataclass
+
+    @dataclass
+    class FakeCtx:
+        command: str = "stats"
+        text: str = "/stats auth"
+        args_text: str = "auth"
+        args: tuple = ("auth",)
+        message = None
+        reply_to = None
+        reply_text = None
+        config_path = None
+        plugin_config: dict = None
+        runtime = None
+        executor = None
+
+        def __post_init__(self):
+            if self.plugin_config is None:
+                self.plugin_config = {}
+
+    cmd = StatsCommand()
+    with patch(
+        "untether.telegram.commands.stats.get_auth_status",
+        return_value=[],
+    ):
+        result = await cmd.handle(FakeCtx())
+    assert "No engines found" in result.text

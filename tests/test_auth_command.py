@@ -74,7 +74,7 @@ def test_auth_command_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_auth_no_args_shows_usage() -> None:
+async def test_auth_no_args_shows_codex_info() -> None:
     from dataclasses import dataclass, field
 
     @dataclass
@@ -93,11 +93,12 @@ async def test_auth_no_args_shows_usage() -> None:
 
     cmd = AuthCommand()
     result = await cmd.handle(FakeCtx())
-    assert "Usage" in result.text
+    assert "/auth codex" in result.text
+    assert "Only Codex" in result.text
 
 
 @pytest.mark.anyio
-async def test_auth_unknown_engine() -> None:
+async def test_auth_non_codex_engine_shows_info() -> None:
     from dataclasses import dataclass, field
 
     @dataclass
@@ -116,7 +117,7 @@ async def test_auth_unknown_engine() -> None:
 
     cmd = AuthCommand()
     result = await cmd.handle(FakeCtx())
-    assert "Unknown engine" in result.text
+    assert "Only Codex" in result.text
 
 
 @pytest.mark.anyio
@@ -175,27 +176,3 @@ async def test_auth_concurrent_guard() -> None:
         assert "already in progress" in result.text
     finally:
         auth_mod._auth_running = old_value
-
-
-@pytest.mark.anyio
-async def test_auth_status_check() -> None:
-    from dataclasses import dataclass, field
-
-    @dataclass
-    class FakeCtx:
-        command: str = "auth"
-        text: str = "/auth status"
-        args_text: str = "status"
-        args: tuple = ("status",)
-        message = None
-        reply_to = None
-        reply_text = None
-        config_path = None
-        plugin_config: dict = field(default_factory=dict)
-        runtime = None
-        executor = None
-
-    cmd = AuthCommand()
-    result = await cmd.handle(FakeCtx())
-    assert "Auth Status" in result.text
-    assert "codex" in result.text
