@@ -39,6 +39,8 @@ def _make_ctx(
     ctx.config_path = config_path
     ctx.runtime.engine_ids = engine_ids
     ctx.runtime.default_engine = default_engine
+    ctx.runtime.default_context_for_chat.return_value = None
+    ctx.runtime.project_default_engine.return_value = None
     ctx.executor = AsyncMock()
     ctx.executor.send = AsyncMock(return_value=None)
     ctx.executor.edit = AsyncMock(return_value=None)
@@ -510,7 +512,7 @@ class TestEngine:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "global default" in msg.text.lower()
+        assert "current:" in msg.text.lower()
 
     @pytest.mark.anyio
     async def test_engine_no_config_path(self):
@@ -722,6 +724,124 @@ class TestEngineAwareTransitions:
         msg = _last_edit_msg(ctx)
         assert "Reasoning" not in msg.text
         assert "config:rs" not in _buttons_data(msg)
+
+
+# ---------------------------------------------------------------------------
+# Project-level default engine
+# ---------------------------------------------------------------------------
+
+
+class TestProjectDefaultEngine:
+    """Tests that /config respects project-level default_engine."""
+
+    @pytest.mark.anyio
+    async def test_home_uses_project_default_engine(self, tmp_path):
+        """Home page resolves engine from project default, not global."""
+        from untether.context import RunContext
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        # Project bound to this chat has default_engine="codex"
+        ctx.runtime.default_context_for_chat.return_value = RunContext(
+            project="codex-test"
+        )
+        ctx.runtime.project_default_engine.return_value = "codex"
+
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "Engine: <b>codex</b>" in msg.text
+        # Claude-specific buttons hidden
+        assert "Plan mode" not in msg.text
+        assert "config:pm" not in _buttons_data(msg)
+
+    @pytest.mark.anyio
+    async def test_home_project_default_shows_default_annotation(self, tmp_path):
+        """When project default matches global default, shows '(default)'."""
+        from untether.context import RunContext
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        # Project also defaults to claude (same as global)
+        ctx.runtime.default_context_for_chat.return_value = RunContext(
+            project="claude-test"
+        )
+        ctx.runtime.project_default_engine.return_value = "claude"
+
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "Engine: <b>claude (default)</b>" in msg.text
+        # Claude buttons should be visible
+        assert "Plan mode" in msg.text
+        assert "config:pm" in _buttons_data(msg)
+
+    @pytest.mark.anyio
+    async def test_home_chat_override_beats_project_default(self, tmp_path):
+        """Chat-level override takes priority over project default."""
+        from untether.context import RunContext
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_default_engine(123, "opencode")
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        # Project says codex, but chat override says opencode
+        ctx.runtime.default_context_for_chat.return_value = RunContext(
+            project="codex-test"
+        )
+        ctx.runtime.project_default_engine.return_value = "codex"
+
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "Engine: <b>opencode</b>" in msg.text
+
+    @pytest.mark.anyio
+    async def test_planmode_guard_respects_project_default(self, tmp_path):
+        """Plan mode guard uses project default, not global default."""
+        from untether.context import RunContext
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        # Project default is codex — plan mode should be blocked
+        ctx.runtime.default_context_for_chat.return_value = RunContext(
+            project="codex-test"
+        )
+        ctx.runtime.project_default_engine.return_value = "codex"
+
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Only available for Claude Code" in msg.text
+
+    @pytest.mark.anyio
+    async def test_engine_page_shows_effective_from_project(self, tmp_path):
+        """Engine sub-page Current label reflects project default."""
+        from untether.context import RunContext
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="ag",
+            text="config:ag",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        ctx.runtime.default_context_for_chat.return_value = RunContext(
+            project="pi-test"
+        )
+        ctx.runtime.project_default_engine.return_value = "pi"
+
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Current: <b>pi</b>" in msg.text
 
 
 # ---------------------------------------------------------------------------

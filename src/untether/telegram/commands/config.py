@@ -38,6 +38,39 @@ def _check(label: str, *, active: bool) -> str:
     return f"✓ {label}" if active else label
 
 
+async def _resolve_effective_engine(
+    ctx: CommandContext,
+) -> tuple[str, str]:
+    """Resolve effective engine and display label for a chat.
+
+    Resolution order: chat override → project default → global default.
+
+    Returns ``(engine_id, label)`` where *label* is e.g. ``"codex"`` or
+    ``"claude (default)"`` (annotated when effective == global default).
+    """
+    from ..chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+    chat_id = ctx.message.channel_id
+    global_default = ctx.runtime.default_engine
+
+    chat_override = None
+    if ctx.config_path is not None:
+        prefs = ChatPrefsStore(resolve_prefs_path(ctx.config_path))
+        chat_override = await prefs.get_default_engine(chat_id)
+
+    if chat_override is not None:
+        effective = chat_override
+    else:
+        project_default = None
+        context = ctx.runtime.default_context_for_chat(chat_id)
+        if context is not None:
+            project_default = ctx.runtime.project_default_engine(context)
+        effective = project_default if project_default is not None else global_default
+
+    label = f"{effective} (default)" if effective == global_default else effective
+    return effective, label
+
+
 # ---------------------------------------------------------------------------
 # Home page
 # ---------------------------------------------------------------------------
@@ -57,9 +90,9 @@ async def _page_home(ctx: CommandContext) -> None:
     chat_id = ctx.message.channel_id
     config_path = ctx.config_path
 
+    current_engine, engine_label = await _resolve_effective_engine(ctx)
+
     pm_label = "—"
-    engine_label = ctx.runtime.default_engine
-    current_engine = ctx.runtime.default_engine
     trigger_label = "all"
     model_label = "default"
     reasoning_label = "default"
@@ -79,10 +112,6 @@ async def _page_home(ctx: CommandContext) -> None:
             pm_label = "off"
         else:
             pm_label = "default"
-
-        eng = await prefs.get_default_engine(chat_id)
-        current_engine = eng if eng else ctx.runtime.default_engine
-        engine_label = eng if eng else f"{ctx.runtime.default_engine} (global)"
 
         trig = await prefs.get_trigger_mode(chat_id)
         trigger_label = trig or "all"
@@ -158,7 +187,7 @@ async def _page_home(ctx: CommandContext) -> None:
 
     _DOCS_URL = "https://github.com/littlebearapps/untether#-quick-start"
     lines.append(
-        f'\nFor help, see the user guide and how-to docs '
+        f"\nFor help, see the user guide and how-to docs "
         f'in the <a href="{_DOCS_URL}">Untether repo</a>.'
     )
 
@@ -234,8 +263,7 @@ async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None
     chat_id = ctx.message.channel_id
 
     # Plan mode is Claude-only — guard against non-Claude engines
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
     if current_engine != "claude":
         await _respond(
             ctx,
@@ -424,16 +452,14 @@ async def _page_engine(ctx: CommandContext, action: str | None = None) -> None:
         return
 
     current = await prefs.get_default_engine(chat_id)
-    global_default = ctx.runtime.default_engine
-    current_label = current if current else f"{global_default} (global default)"
+    _, effective_label = await _resolve_effective_engine(ctx)
 
     lines = [
         "<b>⚙️ Default engine</b>",
         "",
-        "Sets the default engine for new messages in this chat.",
-        f"Global default: <b>{global_default}</b>",
+        "Override the engine for this chat.",
         "",
-        f"Current: <b>{current_label}</b>",
+        f"Current: <b>{effective_label}</b>",
     ]
 
     engine_buttons = [
@@ -549,8 +575,7 @@ async def _page_model(ctx: CommandContext, action: str | None = None) -> None:
     chat_id = ctx.message.channel_id
 
     # Resolve current engine
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
 
     if action == "clr":
         current = await prefs.get_engine_override(chat_id, current_engine)
@@ -626,8 +651,7 @@ async def _page_reasoning(ctx: CommandContext, action: str | None = None) -> Non
     chat_id = ctx.message.channel_id
 
     # Reasoning is engine-specific — guard against unsupported engines
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
     if not supports_reasoning(current_engine):
         await _respond(
             ctx,
@@ -749,8 +773,7 @@ async def _page_ask_questions(ctx: CommandContext, action: str | None = None) ->
     chat_id = ctx.message.channel_id
 
     # Claude-only guard
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
     if current_engine not in ASK_QUESTIONS_SUPPORTED_ENGINES:
         await _respond(
             ctx,
@@ -870,8 +893,7 @@ async def _page_diff_preview(ctx: CommandContext, action: str | None = None) -> 
     chat_id = ctx.message.channel_id
 
     # Claude-only guard
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
     if current_engine not in DIFF_PREVIEW_SUPPORTED_ENGINES:
         await _respond(
             ctx,
@@ -998,8 +1020,7 @@ async def _page_cost_usage(ctx: CommandContext, action: str | None = None) -> No
     prefs = ChatPrefsStore(resolve_prefs_path(config_path))
     chat_id = ctx.message.channel_id
 
-    eng = await prefs.get_default_engine(chat_id)
-    current_engine = eng if eng else ctx.runtime.default_engine
+    current_engine, _ = await _resolve_effective_engine(ctx)
 
     has_api_cost = current_engine in API_COST_SUPPORTED_ENGINES
     has_sub_usage = current_engine in SUBSCRIPTION_USAGE_SUPPORTED_ENGINES

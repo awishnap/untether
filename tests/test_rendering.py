@@ -87,6 +87,38 @@ def test_render_markdown_preserves_inner_entities() -> None:
         assert end <= text_utf16_len
 
 
+def test_prepare_telegram_multi_footer_only_on_last() -> None:
+    """Continued messages should NOT repeat the footer — only the last chunk gets it."""
+    from untether.telegram.render import MarkdownParts, prepare_telegram_multi
+
+    footer = "ctx: test\n🏷 sonnet"
+    body = "word " * 200  # Long enough to split
+    parts = MarkdownParts(header="done", body=body, footer=footer)
+
+    payloads = prepare_telegram_multi(parts, max_body_chars=200)
+
+    assert len(payloads) > 1, "body should split into multiple messages"
+    # Only the last message should contain the footer
+    for i, (text, _entities) in enumerate(payloads[:-1]):
+        assert "sonnet" not in text, f"message {i + 1} should not have footer"
+    last_text, _ = payloads[-1]
+    assert "sonnet" in last_text, "last message should have footer"
+
+
+def test_prepare_telegram_multi_single_message_has_footer() -> None:
+    """A single-chunk message should still include the footer."""
+    from untether.telegram.render import MarkdownParts, prepare_telegram_multi
+
+    footer = "ctx: test"
+    parts = MarkdownParts(header="done", body="short answer", footer=footer)
+
+    payloads = prepare_telegram_multi(parts)
+
+    assert len(payloads) == 1
+    text, _ = payloads[0]
+    assert "ctx: test" in text
+
+
 def test_split_markdown_body_closes_and_reopens_fence() -> None:
     body = "```py\n" + ("line\n" * 10) + "```\n\npost"
 

@@ -1310,3 +1310,69 @@ async def test_error_answer_no_dedup_when_different() -> None:
     final_text = transport.send_calls[-1]["message"].text
     assert "Task completed partially" in final_text
     assert "rate limit" in final_text.lower()
+
+
+# ===========================================================================
+# Post-outline flow guidance
+# ===========================================================================
+
+
+@pytest.mark.anyio
+async def test_outline_pending_session_gets_resume_guidance() -> None:
+    """When a Claude run completes while outline-pending, append resume guidance."""
+    from untether.runners.claude import _OUTLINE_PENDING
+
+    session_id = f"outline-test-{uuid.uuid4().hex[:8]}"
+    runner = ScriptRunner(
+        [Return(answer="Here is my detailed plan outline...")],
+        engine="claude",
+        resume_value=session_id,
+    )
+    transport = FakeTransport()
+    cfg = ExecBridgeConfig(
+        transport=transport,
+        presenter=MarkdownPresenter(),
+        final_notify=True,
+    )
+
+    # Mark session as outline-pending before the run
+    _OUTLINE_PENDING.add(session_id)
+    try:
+        await handle_message(
+            cfg,
+            runner=runner,
+            incoming=IncomingMessage(channel_id=123, message_id=10, text="go"),
+            resume_token=None,
+        )
+
+        final_text = transport.send_calls[-1]["message"].text
+        assert "Resume and say" in final_text
+        assert "approved" in final_text.lower()
+    finally:
+        _OUTLINE_PENDING.discard(session_id)
+
+
+@pytest.mark.anyio
+async def test_normal_completion_no_outline_guidance() -> None:
+    """Normal completions (no outline-pending) should NOT get resume guidance."""
+    runner = ScriptRunner(
+        [Return(answer="Done!")],
+        engine="claude",
+        resume_value=f"normal-{uuid.uuid4().hex[:8]}",
+    )
+    transport = FakeTransport()
+    cfg = ExecBridgeConfig(
+        transport=transport,
+        presenter=MarkdownPresenter(),
+        final_notify=True,
+    )
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="go"),
+        resume_token=None,
+    )
+
+    final_text = transport.send_calls[-1]["message"].text
+    assert "Resume and say" not in final_text

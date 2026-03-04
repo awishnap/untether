@@ -9,6 +9,7 @@ from ...runners.claude import (
     _DISCUSS_APPROVED,
     _OUTLINE_PENDING,
     _REQUEST_TO_SESSION,
+    _REQUEST_TO_TOOL_NAME,
     clear_discuss_cooldown,
     send_claude_control_response,
     set_discuss_cooldown,
@@ -44,6 +45,13 @@ _DENY_MESSAGE = (
     "or terminal UI — only your assistant text messages are visible to them. "
     "Explain what you were about to do and ask how they'd like to proceed, "
     "as a visible message in the chat."
+)
+
+_EXIT_PLAN_DENY_MESSAGE = (
+    "User DENIED your plan via Telegram (Untether bridge). "
+    "They do NOT want you to proceed with this plan. "
+    "Do NOT call ExitPlanMode again. Instead, ask the user "
+    "what they'd like changed, as a visible message in the chat."
 )
 
 _EARLY_TOASTS: dict[str, str] = {
@@ -186,7 +194,15 @@ class ClaudeControlCommand:
         session_id = _REQUEST_TO_SESSION.get(request_id)
 
         # Send control response via the public API
-        deny_message = _DENY_MESSAGE if not approved else None
+        if not approved:
+            tool_name = _REQUEST_TO_TOOL_NAME.get(request_id, "")
+            deny_message = (
+                _EXIT_PLAN_DENY_MESSAGE
+                if tool_name == "ExitPlanMode"
+                else _DENY_MESSAGE
+            )
+        else:
+            deny_message = None
         success = await send_claude_control_response(
             request_id, approved, deny_message=deny_message
         )

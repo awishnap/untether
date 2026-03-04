@@ -176,6 +176,36 @@ class TestFormatExportMarkdown:
         assert "$0.5" in md
         assert "3 turns" in md
 
+    def test_with_token_counts_no_cost(self):
+        """Codex-style usage with only token counts shows token summary."""
+        md = _format_export_markdown(
+            "s1",
+            [{"type": "completed", "ok": True, "answer": "ok", "error": None}],
+            {"input_tokens": 5000, "output_tokens": 1200, "cached_input_tokens": 3000},
+        )
+        assert "5000 in / 1200 out tokens" in md
+        assert "Usage:" in md
+
+    def test_with_cost_and_tokens_cost_wins(self):
+        """When both cost and tokens are present, show cost not token fallback."""
+        md = _format_export_markdown(
+            "s1",
+            [{"type": "completed", "ok": True, "answer": "ok", "error": None}],
+            {"total_cost_usd": 0.05, "input_tokens": 5000, "output_tokens": 1200},
+        )
+        assert "$0.05" in md
+        assert "tokens" not in md
+
+    def test_with_input_tokens_only(self):
+        """Token fallback works with only input_tokens (no output)."""
+        md = _format_export_markdown(
+            "s1",
+            [{"type": "completed", "ok": True, "answer": "ok", "error": None}],
+            {"input_tokens": 3000},
+        )
+        assert "3000 in tokens" in md
+        assert "out" not in md
+
     def test_error_export(self):
         events = [
             {

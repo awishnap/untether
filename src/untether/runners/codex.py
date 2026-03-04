@@ -456,6 +456,7 @@ class CodexRunState:
 class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
     engine: EngineId = ENGINE
     resume_re = _RESUME_RE
+    model: str | None = None
     logger = logger
 
     def __init__(
@@ -616,11 +617,14 @@ class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             case _:
                 pass
 
-        # Build meta from run options (Codex JSONL doesn't include model info)
+        # Build meta from runner config + run options
         meta: dict[str, Any] | None = None
+        model = self.model
         run_options = get_run_options()
         if run_options is not None and run_options.model:
-            meta = {"model": str(run_options.model)}
+            model = run_options.model
+        if model is not None:
+            meta = {"model": str(model)}
 
         return translate_codex_event(
             data,

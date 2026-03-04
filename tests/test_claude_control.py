@@ -21,6 +21,7 @@ from untether.runners.claude import (
     _HANDLED_REQUESTS,
     _REQUEST_TO_INPUT,
     _REQUEST_TO_SESSION,
+    _REQUEST_TO_TOOL_NAME,
     _SESSION_STDIN,
     check_discuss_cooldown,
     clear_discuss_cooldown,
@@ -1217,3 +1218,102 @@ def test_diff_preview_edit_shows_diff_text() -> None:
     # The action title should contain diff markers
     assert "- old_value" in action_event.action.title
     assert "+ new_value" in action_event.action.title
+
+
+# ===========================================================================
+# Q. ExitPlanMode-specific deny message
+# ===========================================================================
+
+
+@pytest.mark.anyio
+async def test_deny_exit_plan_mode_uses_specific_message() -> None:
+    """Denying ExitPlanMode sends the specific 'do not retry' deny message."""
+    from untether.telegram.commands.claude_control import (
+        ClaudeControlCommand,
+        _EXIT_PLAN_DENY_MESSAGE,
+    )
+
+    runner = ClaudeRunner(claude_cmd="claude")
+    session_id = "sess-epm-deny"
+
+    _ACTIVE_RUNNERS[session_id] = (runner, 0.0)
+    fake_stdin = AsyncMock()
+    _SESSION_STDIN[session_id] = fake_stdin
+    _REQUEST_TO_SESSION["req-epm"] = session_id
+    _REQUEST_TO_INPUT["req-epm"] = {}
+    _REQUEST_TO_TOOL_NAME["req-epm"] = "ExitPlanMode"
+
+    from untether.commands import CommandContext
+    from untether.transport import MessageRef
+
+    ctx = CommandContext(
+        command="claude_control",
+        text="claude_control:deny:req-epm",
+        args_text="deny:req-epm",
+        args=("deny:req-epm",),
+        message=MessageRef(channel_id=123, message_id=1),
+        reply_to=None,
+        reply_text=None,
+        config_path=None,
+        plugin_config=None,  # type: ignore[arg-type]
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
+    )
+
+    cmd = ClaudeControlCommand()
+    result = await cmd.handle(ctx)
+
+    assert result is not None
+    assert "Denied" in result.text
+
+    payload = json.loads(fake_stdin.send.call_args[0][0].decode())
+    inner = payload["response"]["response"]
+    assert inner["behavior"] == "deny"
+    assert inner["message"] == _EXIT_PLAN_DENY_MESSAGE
+    assert "Do NOT call ExitPlanMode again" in inner["message"]
+
+
+@pytest.mark.anyio
+async def test_deny_non_exit_plan_mode_uses_generic_message() -> None:
+    """Denying a non-ExitPlanMode tool uses the generic deny message."""
+    from untether.telegram.commands.claude_control import (
+        ClaudeControlCommand,
+        _DENY_MESSAGE,
+    )
+
+    runner = ClaudeRunner(claude_cmd="claude")
+    session_id = "sess-bash-deny"
+
+    _ACTIVE_RUNNERS[session_id] = (runner, 0.0)
+    fake_stdin = AsyncMock()
+    _SESSION_STDIN[session_id] = fake_stdin
+    _REQUEST_TO_SESSION["req-bash"] = session_id
+    _REQUEST_TO_INPUT["req-bash"] = {}
+    _REQUEST_TO_TOOL_NAME["req-bash"] = "Bash"
+
+    from untether.commands import CommandContext
+    from untether.transport import MessageRef
+
+    ctx = CommandContext(
+        command="claude_control",
+        text="claude_control:deny:req-bash",
+        args_text="deny:req-bash",
+        args=("deny:req-bash",),
+        message=MessageRef(channel_id=123, message_id=1),
+        reply_to=None,
+        reply_text=None,
+        config_path=None,
+        plugin_config=None,  # type: ignore[arg-type]
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
+    )
+
+    cmd = ClaudeControlCommand()
+    result = await cmd.handle(ctx)
+
+    assert result is not None
+
+    payload = json.loads(fake_stdin.send.call_args[0][0].decode())
+    inner = payload["response"]["response"]
+    assert inner["behavior"] == "deny"
+    assert inner["message"] == _DENY_MESSAGE

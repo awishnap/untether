@@ -254,7 +254,11 @@ def prepare_telegram_multi(
         payloads.append(
             render_markdown(
                 assemble_markdown_parts(
-                    MarkdownParts(header=header, body=chunk, footer=parts.footer)
+                    MarkdownParts(
+                        header=header,
+                        body=chunk,
+                        footer=parts.footer if idx == total else None,
+                    )
                 )
             )
         )

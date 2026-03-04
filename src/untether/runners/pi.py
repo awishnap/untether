@@ -440,8 +440,12 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         found_session: ResumeToken | None,
     ) -> list[UntetherEvent]:
         meta: dict[str, Any] = {"cwd": os.getcwd()}
-        if self.model:
-            meta["model"] = self.model
+        model = self.model
+        run_options = get_run_options()
+        if run_options is not None and run_options.model:
+            model = run_options.model
+        if model:
+            meta["model"] = model
         if self.provider:
             meta["provider"] = self.provider
         return translate_pi_event(

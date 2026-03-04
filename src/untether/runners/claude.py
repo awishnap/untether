@@ -79,6 +79,10 @@ _REQUEST_TO_SESSION: dict[str, str] = {}
 # Claude Code CLI requires updatedInput in can_use_tool responses
 _REQUEST_TO_INPUT: dict[str, dict[str, Any]] = {}
 
+# Phase 2: Global registry mapping request_id -> tool_name
+# Used by claude_control.py to send tool-specific deny messages
+_REQUEST_TO_TOOL_NAME: dict[str, str] = {}
+
 # Recently handled request_ids (prevents duplicate callback warnings)
 _HANDLED_REQUESTS: set[str] = set()
 
@@ -584,6 +588,7 @@ def translate_claude_event(
                             request_id=request_id,
                         )
                         _REQUEST_TO_INPUT.pop(request_id, None)
+                        _REQUEST_TO_TOOL_NAME.pop(request_id, None)
                         state.auto_deny_queue.append(
                             (
                                 request_id,
@@ -655,6 +660,7 @@ def translate_claude_event(
                             deny_msg = escalation_msg
 
                         _REQUEST_TO_INPUT.pop(request_id, None)
+                        _REQUEST_TO_TOOL_NAME.pop(request_id, None)
                         state.auto_deny_queue.append((request_id, deny_msg))
 
                         # Show synthetic Approve/Deny buttons (no "Pause" option).
@@ -753,9 +759,12 @@ def translate_claude_event(
             if factory.resume:
                 session_id = factory.resume.value
                 _REQUEST_TO_SESSION[request_id] = session_id
-                # Store original tool input for updatedInput in response
+                # Store original tool input and tool name for response handling
                 if isinstance(request, claude_schema.ControlCanUseToolRequest):
                     _REQUEST_TO_INPUT[request_id] = getattr(request, "input", {})
+                    _REQUEST_TO_TOOL_NAME[request_id] = getattr(
+                        request, "tool_name", ""
+                    )
                 logger.debug(
                     "control_request.registered",
                     request_id=request_id,
@@ -775,6 +784,7 @@ def translate_claude_event(
             for rid in expired:
                 del state.pending_control_requests[rid]
                 _REQUEST_TO_INPUT.pop(rid, None)
+                _REQUEST_TO_TOOL_NAME.pop(rid, None)
                 state.auto_deny_queue.append(
                     (rid, "Request timed out — no response from user within 5 minutes.")
                 )
@@ -959,10 +969,12 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             # Claude Code CLI requires updatedInput for can_use_tool responses
             if request_id in _REQUEST_TO_INPUT:
                 inner["updatedInput"] = _REQUEST_TO_INPUT.pop(request_id)
+            _REQUEST_TO_TOOL_NAME.pop(request_id, None)
         else:
             inner = {"behavior": "deny", "message": deny_message or "User denied"}
             # Clean up stored input on denial too
             _REQUEST_TO_INPUT.pop(request_id, None)
+            _REQUEST_TO_TOOL_NAME.pop(request_id, None)
         response = {
             "type": "control_response",
             "response": {
@@ -1727,6 +1739,7 @@ async def send_claude_control_response(
         # Clean up stale mappings
         del _REQUEST_TO_SESSION[request_id]
         _REQUEST_TO_INPUT.pop(request_id, None)
+        _REQUEST_TO_TOOL_NAME.pop(request_id, None)
         return False
 
     runner, _ = _ACTIVE_RUNNERS[session_id]

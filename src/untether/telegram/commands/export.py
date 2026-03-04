@@ -65,6 +65,8 @@ def _format_export_markdown(
         cost = usage.get("total_cost_usd")
         turns = usage.get("num_turns")
         duration_ms = usage.get("duration_ms")
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
         parts: list[str] = []
         if cost is not None:
             parts.append(f"${cost:.4f}")
@@ -73,6 +75,11 @@ def _format_export_markdown(
         if duration_ms:
             secs = duration_ms / 1000
             parts.append(f"{secs:.1f}s")
+        if cost is None and input_tokens is not None:
+            token_parts = [f"{input_tokens} in"]
+            if output_tokens is not None:
+                token_parts.append(f"{output_tokens} out")
+            parts.append(" / ".join(token_parts) + " tokens")
         if parts:
             lines.append(f"**Usage:** {' · '.join(parts)}\n")
 

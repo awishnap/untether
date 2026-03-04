@@ -1076,6 +1076,20 @@ async def handle_message(
         duration_ms=int(elapsed * 1000),
     )
     sync_resume_token(progress_tracker, completed.resume or outcome.resume)
+
+    # Post-outline guidance: if the session was outline-pending (user clicked
+    # "Pause & Outline Plan" but Claude ended the run instead of calling
+    # ExitPlanMode), append resume instructions so the user knows how to proceed.
+    if runner.engine == "claude" and resume_value:
+        from .runners.claude import _OUTLINE_PENDING
+
+        if resume_value in _OUTLINE_PENDING and final_answer and final_answer.strip():
+            final_answer += (
+                "\n\n---\n"
+                "Plan outline complete. Resume and say "
+                '"approved" to proceed, or send feedback to revise.'
+            )
+
     state = progress_tracker.snapshot(
         resume_formatter=runner.format_resume,
         context_line=context_line,
