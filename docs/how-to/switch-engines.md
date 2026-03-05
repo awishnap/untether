@@ -11,6 +11,8 @@ Prefix the first non-empty line with an engine directive:
 /claude shrink and store artifacts forever
 /opencode hide their paper until they reply
 /pi render a diorama of this timeline
+/gemini analyse the codebase architecture
+/amp review recent changes
 ```
 
 Directives are only parsed at the start of the first non-empty line.
@@ -36,9 +38,14 @@ Selection precedence (highest to lowest): resume token → `/<engine-id>` direct
 ## Engine installation
 
 Untether shells out to engine CLIs. Install them and make sure they’re on your `PATH`
-(`codex`, `claude`, `opencode`, `pi`). Authentication is handled by each CLI.
+(`codex`, `claude`, `opencode`, `pi`, `gemini`, `amp`). Authentication is handled by each CLI.
+
+## Feature differences
+
+Not all features are available on every engine. See the [engine compatibility matrix](https://github.com/littlebearapps/untether#engine-compatibility) in the README for a full breakdown of which features (interactive permissions, plan mode, reasoning levels, etc.) each engine supports.
 
 ## Related
 
 - [Commands & directives](../reference/commands-and-directives.md)
 - [Config reference](../reference/config.md)
+- [Multi-engine workflows](../tutorials/multi-engine.md) — tutorial on using multiple engines

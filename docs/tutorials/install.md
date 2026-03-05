@@ -30,7 +30,7 @@ Verify it's installed:
 untether --version
 ```
 
-You should see something like `0.28.1`.
+You should see something like `0.31.0`.
 
 ## 3. Install agent CLIs
 
@@ -70,6 +70,22 @@ npm install -g @mariozechner/pi-coding-agent
 ```
 
 Pi can authenticate via a provider login or use API billing. You can log in with Anthropic (Claude subscription), OpenAI (ChatGPT subscription), GitHub Copilot, Google Cloud Code Assist (Gemini CLI), or Antigravity (Gemini 3, Claude, GPT-OSS), or choose API billing instead.
+
+### Gemini CLI
+
+```sh
+npm install -g @google/gemini-cli
+```
+
+Gemini CLI uses Google AI Studio or Vertex AI for authentication. Run `gemini` and sign in with your Google account. Supports plan mode, sandboxing, and automatic model routing (Pro for planning, Flash for implementation).
+
+### AMP
+
+```sh
+npm install -g @sourcegraph/amp
+```
+
+AMP is the Sourcegraph coding agent. Run `amp login` to authenticate. Supports mode selection (`--mode deep|free|rush|smart`), thread sharing, and a rich permission system.
 
 ## 4. Run onboarding
 
@@ -245,6 +261,8 @@ untether runs these engines on your computer. switch anytime with /agent.
   claude    ✓ installed
   opencode  ✗ not found    npm install -g opencode-ai@latest
   pi        ✗ not found    npm install -g @mariozechner/pi-coding-agent
+  gemini    ✗ not found    npm install -g @google/gemini-cli
+  amp       ✗ not found    npm install -g @sourcegraph/amp
 
 ? choose default engine:
  ❯ codex

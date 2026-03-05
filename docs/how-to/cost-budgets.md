@@ -90,7 +90,18 @@ When enabled, completed messages show a line like:
 
 This tells you how much of your 5-hour and 7-day rate limits you've used, and when they reset.
 
+## Historical statistics
+
+For historical run data beyond the current session, use the `/stats` command:
+
+```
+/stats
+```
+
+This shows per-engine session statistics (runs, actions, duration) across today, this week, and all time. Pass an engine name to filter (e.g. `/stats claude`). Data is persisted in the config directory and auto-pruned after 90 days.
+
 ## Related
 
 - [Configuration](../reference/config.md) — full config reference for budget settings
+- [Commands & directives](../reference/commands-and-directives.md) — `/stats` and `/usage` command reference
 - [Troubleshooting](troubleshooting.md) — credential issues with `/usage`

@@ -53,6 +53,8 @@ This line is parsed from replies and takes precedence over new directives.
 | `/restart` | Gracefully drain active runs and restart Untether. |
 | `/verbose` | Toggle verbose progress mode (on/off/clear). Shows tool details in progress messages. |
 | `/config` | Interactive settings menu — plan mode, ask mode, verbose, engine, model, reasoning, trigger toggles with inline buttons. |
+| `/stats` | Per-engine session statistics — runs, actions, and duration for today, this week, and all time. Pass an engine name to filter (e.g. `/stats claude`). |
+| `/auth` | Headless device re-authentication for Codex — runs `codex login --device-auth` and sends the verification URL + device code. `/auth status` checks CLI availability. Codex-only. |
 | `/new` | Clear stored sessions for the current scope (topic/chat). |
 
 Notes:

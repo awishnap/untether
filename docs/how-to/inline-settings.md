@@ -64,10 +64,21 @@ When you switch engines via the Engine sub-page, the home page automatically sho
 | Plan mode | off, on, auto | Yes (chat prefs) |
 | Ask mode | off, on | Yes (chat prefs) |
 | Verbose | off, on | No (in-memory, resets on restart) |
+| Diff preview | off, on | Yes (chat prefs) |
 | Engine | any configured engine | Yes (chat prefs) |
 | Model | view + clear (set via `/model set`) | Yes (chat prefs) |
 | Reasoning | minimal, low, medium, high, xhigh | Yes (chat prefs) |
+| Cost & usage | API cost on/off, subscription usage on/off | Yes (chat prefs) |
 | Trigger | all, mentions | Yes (chat prefs) |
+
+### Cost & Usage page
+
+The Cost & Usage sub-page (added in v0.31.0) merges the previous separate API cost and subscription usage toggles into a unified page. Toggle whether completed messages show:
+
+- **API cost** — per-run cost in the message footer (requires engine cost reporting)
+- **Subscription usage** — 5h/weekly subscription usage in the footer (Claude Code only)
+
+For historical cost data across sessions, use the [`/stats`](../reference/commands-and-directives.md) command.
 
 ## Callbacks vs commands
 

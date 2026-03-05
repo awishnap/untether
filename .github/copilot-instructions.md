@@ -1,6 +1,6 @@
 # Untether — Copilot Instructions
 
-Untether is a Telegram bridge for AI coding agents (Claude Code, Codex, OpenCode, Pi). It runs on the user's machine and streams agent progress to Telegram.
+Untether is a Telegram bridge for AI coding agents (Claude Code, Codex, OpenCode, Pi, Gemini CLI, Amp). It runs on the user's machine and streams agent progress to Telegram.
 
 ## Stack
 
@@ -36,3 +36,7 @@ All Telegram writes go through `TelegramOutbox` — never call Bot API directly.
 - Feature branches: `feature/*`, `fix/*`, `docs/*`
 - Every bug fix references a GitHub issue
 - Update CHANGELOG.md for user-facing changes
+
+## Commands
+
+Key Telegram commands: `/cancel`, `/agent`, `/model`, `/planmode`, `/usage`, `/stats` (session statistics), `/auth` (Codex re-auth), `/export`, `/browse`, `/config`, `/verbose`, `/restart`.

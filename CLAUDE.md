@@ -25,7 +25,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 - **Subscription usage footer** — configurable `[footer]` to show 5h/weekly subscription usage instead of/alongside API costs
 - **Graceful restart** — `/restart` command drains active runs before restarting; SIGTERM also triggers graceful drain
 - **Compact startup message** — version number, conditional diagnostics (only shows mode/topics/triggers/engines when they carry signal), project count instead of full list
-- **Model/mode footer** — final messages show model name + permission mode (e.g. `🏷 sonnet · plan`) from `StartedEvent.meta`; all 4 engines populate model info
+- **Model/mode footer** — final messages show model name + permission mode (e.g. `🏷 sonnet · plan`) from `StartedEvent.meta`; all engines populate model info
 - **`/verbose`** — toggle verbose progress mode per chat; shows tool details (file paths, commands, patterns) in progress messages
 - **`/config`** — inline settings menu with navigable sub-pages; toggle plan mode, ask mode, verbose, engine, trigger via buttons
 - **`[progress]` config** — global verbosity and max_actions settings in `untether.toml`
@@ -36,7 +36,7 @@ See `.claude/skills/claude-stream-json/` and `.claude/rules/control-channel.md` 
 ## Architecture
 
 ```
-Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencode/pi)
+Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencode/pi/gemini/amp)
                                        |
                                   ProgressTracker
 ```
@@ -51,6 +51,8 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencod
 | File | Purpose |
 |------|---------|
 | `runners/claude.py` | Claude Code runner, interactive features |
+| `runners/gemini.py` | Gemini CLI runner |
+| `runners/amp.py` | AMP CLI runner (Sourcegraph) |
 | `runner_bridge.py` | Connects runners to Telegram presenter, injects agent preamble |
 | `cost_tracker.py` | Per-run/daily cost tracking and budget alerts |
 | `commands/claude_control.py` | Approve/Deny/Discuss callback handler |

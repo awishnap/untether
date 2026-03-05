@@ -252,6 +252,73 @@ journalctl --user -u untether -b
 
 Look for `handle.worker_failed`, `handle.runner_failed`, or `config.read.toml_error` entries.
 
+## Error hints
+
+When an engine fails, Untether scans the error message and shows an actionable recovery hint below the error. These hints cover the most common failure modes across all engines and providers.
+
+### Authentication errors
+
+| Error | Hint |
+|-------|------|
+| Access token could not be refreshed | Run `codex login --device-auth` to re-authenticate |
+| Log out and sign in again | Run `codex login` to re-authenticate |
+| `anthropic_api_key` | Check that ANTHROPIC_API_KEY is set in your environment |
+| `openai_api_key` | Check that OPENAI_API_KEY is set in your environment |
+| `google_api_key` | Check that your Google API key is set in your environment |
+
+### Subscription and billing limits
+
+| Error | Hint |
+|-------|------|
+| Out of extra usage / hit your limit | Subscription usage limit reached — wait for the reset window, then resume |
+| `insufficient_quota` / exceeded your current quota | OpenAI billing quota exceeded — add credits at platform.openai.com |
+| `billing_hard_limit_reached` | OpenAI billing hard limit — increase your spend limit at platform.openai.com |
+| `resource_exhausted` | Google API quota exhausted — check quota at console.cloud.google.com |
+
+### API overload and server errors
+
+| Error | Hint |
+|-------|------|
+| `overloaded_error` (529) | Anthropic API overloaded — temporary, session saved, try again in a few minutes |
+| Server is overloaded | API server overloaded — temporary, try again in a few minutes |
+| `internal_server_error` (500) | Internal server error — usually temporary, try again shortly |
+| Bad gateway (502) | Bad gateway error — usually temporary, try again shortly |
+| Service unavailable (503) | API temporarily unavailable — try again in a few minutes |
+| Gateway timeout (504) | Gateway timed out — usually temporary, try again shortly |
+
+### Rate limits
+
+| Error | Hint |
+|-------|------|
+| Rate limit / too many requests | Rate limited — the engine will retry automatically |
+
+### Network errors
+
+| Error | Hint |
+|-------|------|
+| Connection refused | Check that the target service is running |
+| Connect timeout | Connection timed out — check your network, then try again |
+| Read timeout | Connection timed out — usually transient, try again |
+| Name or service not known | DNS resolution failed — check your network connection |
+| Network is unreachable | Network unreachable — check your internet connection |
+
+### Process signals
+
+| Error | Hint |
+|-------|------|
+| SIGTERM | Untether was restarted — session saved, resume by sending a new message |
+| SIGKILL | Process forcefully terminated (timeout or OOM) — try resuming |
+| SIGABRT | Process aborted unexpectedly — try starting a fresh session |
+
+### Session errors
+
+| Error | Hint |
+|-------|------|
+| Session not found | Try a fresh session without --session flag |
+| Error during execution | Session failed to load (possibly corrupted) — send `/new` to start fresh |
+
+All hints are case-insensitive and pattern-matched against the full error output. The first matching hint wins. Your session is automatically saved in most cases, so you can resume after resolving the issue.
+
 ## Related
 
 - [Operations and monitoring](operations.md) — `/ping`, `/restart`, hot-reload

@@ -1,6 +1,6 @@
 # Untether
 
-> Telegram bridge for AI coding agents. Send tasks by voice or text, stream progress live, and approve changes — from your phone, anywhere. Works with Claude Code, Codex, OpenCode, and Pi.
+> Telegram bridge for AI coding agents. Send tasks by voice or text, stream progress live, and approve changes — from your phone, anywhere. Works with Claude Code, Codex, OpenCode, Pi, Gemini CLI, and Amp.
 
 ## Tutorials
 
@@ -21,10 +21,18 @@
 - [Interactive approval](https://github.com/littlebearapps/untether/blob/master/docs/how-to/interactive-approval.md): Approve, deny, and discuss tool calls from Telegram
 - [Plan mode](https://github.com/littlebearapps/untether/blob/master/docs/how-to/plan-mode.md): Control plan transitions with progressive cooldown
 - [Cost budgets](https://github.com/littlebearapps/untether/blob/master/docs/how-to/cost-budgets.md): Per-run and daily budget limits, warnings, and auto-cancel
+- [Inline settings](https://github.com/littlebearapps/untether/blob/master/docs/how-to/inline-settings.md): /config button menu with Cost & Usage page
+- [Session statistics](https://github.com/littlebearapps/untether/blob/master/docs/how-to/session-statistics.md): /stats per-engine run counts, actions, and duration
+- [Agent preamble](https://github.com/littlebearapps/untether/blob/master/docs/how-to/preamble.md): Customise the context preamble injected into agent prompts
 - [Schedule tasks](https://github.com/littlebearapps/untether/blob/master/docs/how-to/schedule-tasks.md): Telegram scheduling, cron triggers, and webhook triggers
 - [Webhooks and cron](https://github.com/littlebearapps/untether/blob/master/docs/how-to/webhooks-and-cron.md): Automated runs from external events and schedules
 - [Switch engines](https://github.com/littlebearapps/untether/blob/master/docs/how-to/switch-engines.md): Change engines per chat, topic, or message
 - [Route by chat](https://github.com/littlebearapps/untether/blob/master/docs/how-to/route-by-chat.md): Route messages to projects by chat or topic
+- [Verbose progress](https://github.com/littlebearapps/untether/blob/master/docs/how-to/verbose-progress.md): Tool detail display in progress messages
+- [Browse files](https://github.com/littlebearapps/untether/blob/master/docs/how-to/browse-files.md): /browse inline file navigation
+- [Export sessions](https://github.com/littlebearapps/untether/blob/master/docs/how-to/export-sessions.md): Markdown and JSON transcripts
+- [Group chat](https://github.com/littlebearapps/untether/blob/master/docs/how-to/group-chat.md): Multi-user and trigger modes
+- [Context binding](https://github.com/littlebearapps/untether/blob/master/docs/how-to/context-binding.md): Per-chat project/branch binding
 - [Troubleshooting](https://github.com/littlebearapps/untether/blob/master/docs/how-to/troubleshooting.md): Common issues, debug logging, and preflight checks
 - [Write a plugin](https://github.com/littlebearapps/untether/blob/master/docs/how-to/write-a-plugin.md): Extend with custom engines, transports, and commands
 - [Add a runner](https://github.com/littlebearapps/untether/blob/master/docs/how-to/add-a-runner.md): Implement a new engine backend
@@ -33,7 +41,7 @@
 ## Reference
 
 - [Configuration](https://github.com/littlebearapps/untether/blob/master/docs/reference/config.md): Full config reference for untether.toml
-- [Commands and directives](https://github.com/littlebearapps/untether/blob/master/docs/reference/commands-and-directives.md): Telegram commands, message directives, CLI flags
+- [Commands and directives](https://github.com/littlebearapps/untether/blob/master/docs/reference/commands-and-directives.md): Telegram commands (including /stats, /auth), message directives, CLI flags
 - [Context resolution](https://github.com/littlebearapps/untether/blob/master/docs/reference/context-resolution.md): How Untether resolves project, branch, engine, and session context
 - [Specification](https://github.com/littlebearapps/untether/blob/master/docs/reference/specification.md): Normative behaviour spec
 - [Environment variables](https://github.com/littlebearapps/untether/blob/master/docs/reference/env-vars.md): Env var reference

@@ -14,9 +14,11 @@ Always include a "Manual testing" checklist section in PRs.
 ## Project conventions
 
 - Python 3.12+, anyio for async, msgspec for JSONL parsing, structlog for logging
+- Engines: Claude Code, Codex, OpenCode, Pi (Gemini CLI and Amp coming soon)
 - Australian English in user-facing text (realise, colour, behaviour, licence)
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`
 - 80% test coverage threshold enforced
 - Runner 3-event contract: StartedEvent -> ActionEvent(s) -> CompletedEvent
 - All Telegram writes go through TelegramOutbox (never call Bot API directly)
 - Use EventFactory for event construction, never construct dataclasses directly
+- Key commands: `/cancel`, `/agent`, `/model`, `/planmode`, `/usage`, `/stats`, `/auth`, `/export`, `/browse`, `/config`, `/verbose`, `/restart`

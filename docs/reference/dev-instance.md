@@ -72,7 +72,7 @@ systemctl --user status untether untether-dev
 
 ## Test project directories
 
-Four test workspaces live under `test-projects/` in the repo (gitignored, not version-controlled):
+Six test workspaces live under `test-projects/` in the repo (gitignored, not version-controlled):
 
 | Directory | Engine | Dev config route |
 |-----------|--------|-----------------|
@@ -80,6 +80,8 @@ Four test workspaces live under `test-projects/` in the repo (gitignored, not ve
 | `test-projects/test-codex/` | Codex | `[projects.codex-test]` |
 | `test-projects/test-opencode/` | OpenCode | `[projects.opencode-test]` |
 | `test-projects/test-pi/` | Pi | `[projects.pi-test]` |
+| `test-projects/test-gemini/` | Gemini CLI | `[projects.gemini-test]` |
+| `test-projects/test-amp/` | AMP | `[projects.amp-test]` |
 
 Each has a `CLAUDE.md` and `.claude/settings.json`. They're throwaway workspaces — agents run here during dev testing so untether source isn't accidentally modified.
 
@@ -93,6 +95,8 @@ Each test project has a dedicated Telegram group (all in the `ut-dev` folder):
 | ut-dev: codex | `-4929463515` | Codex |
 | ut-dev: opencode | `-5200822877` | OpenCode |
 | ut-dev: pi | `-5156256333` | Pi |
+| ut-dev: gemini | `-5207762142` | Gemini CLI |
+| ut-dev: amp | `-5230875989` | AMP |
 
 Main dev chat (private): `8351408485` (direct messages to `@untether_dev_bot`)
 

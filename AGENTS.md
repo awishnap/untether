@@ -1,11 +1,11 @@
 # Untether — Agent Instructions
 
-Telegram bridge for AI coding agents. Connects Claude Code, Codex, OpenCode, and Pi to Telegram with interactive permissions, voice notes, and live progress streaming.
+Telegram bridge for AI coding agents. Connects Claude Code, Codex, OpenCode, Pi, Gemini CLI, and Amp to Telegram with interactive permissions, voice notes, and live progress streaming.
 
 ## Architecture
 
 ```
-Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencode/pi)
+Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencode/pi/gemini/amp)
                                        |
                                   ProgressTracker
 ```
@@ -50,6 +50,23 @@ uv run pytest tests/test_*.py -x # specific file
 - Use stub subprocess runners with fake CLI scripts
 - Use `FakeTransport` protocol doubles (not real Telegram clients)
 - Verify 3-event contract in all runner tests
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/cancel` | Stop the running agent |
+| `/agent` | Show or set engine for this chat |
+| `/model` | Override the model for an engine |
+| `/planmode` | Toggle plan mode (on/auto/off) |
+| `/usage` | Show API costs for the current session |
+| `/stats` | Per-engine session statistics (today/week/all-time) |
+| `/auth` | Codex device re-authentication |
+| `/export` | Export session transcript |
+| `/browse` | Browse project files |
+| `/config` | Interactive settings menu |
+| `/verbose` | Toggle verbose progress mode |
+| `/restart` | Gracefully restart Untether |
 
 ## Before committing
 

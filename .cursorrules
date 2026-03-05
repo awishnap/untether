@@ -1,6 +1,6 @@
 # Untether — Cursor Rules
 
-Telegram bridge for AI coding agents (Claude Code, Codex, OpenCode, Pi).
+Telegram bridge for AI coding agents (Claude Code, Codex, OpenCode, Pi, Gemini CLI, Amp).
 
 ## Stack & conventions
 
@@ -45,4 +45,6 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner
 - cost_tracker.py — Per-run/daily cost tracking
 - telegram/bridge.py — Telegram message rendering
 - commands/claude_control.py — Approve/Deny/Discuss callback handler
+- commands/stats.py — /stats session statistics
+- commands/auth.py — /auth Codex device re-authentication
 - markdown.py — Progress/final message formatting

@@ -85,6 +85,7 @@ systemctl --user restart untether  # from shell (systemd)
 - 🗂️ **File browser** — `/browse` to navigate project files with inline buttons
 - ⚙️ **Inline settings** — `/config` opens an in-place settings menu; toggle plan mode, ask mode, verbose, engine, model, reasoning, and trigger with buttons
 - 🧩 **Plugin system** — extend with custom engines, transports, and commands
+- 📊 **Session statistics** — `/stats` shows per-engine run counts, action totals, and duration across today, this week, and all time
 - 💬 **Conversation modes** — assistant (ongoing chat), workspace (forum topics per project), or handoff (reply-to-continue with terminal resume)
 
 ---
@@ -101,6 +102,29 @@ systemctl --user restart untether  # from shell (systemd)
 | [Amp](https://ampcode.com) | `npm i -g @sourcegraph/amp` | Sourcegraph's AI coding agent _(coming soon)_ |
 
 **Note:** Use your existing Claude or ChatGPT subscription — no extra API keys needed (unless you want API billing).
+
+### Engine compatibility
+
+| Feature | Claude Code | Codex CLI | OpenCode | Pi |
+|---------|:-----------:|:---------:|:--------:|:--:|
+| **Progress streaming** | ✅ | ✅ | ✅ | ✅ |
+| **Session resume** | ✅ | ✅ | ✅ | ✅ |
+| **Model override** | ✅ | ✅ | ✅ | ✅ |
+| **Voice input** | ✅ | ✅ | ✅ | ✅ |
+| **Verbose progress** | ✅ | ✅ | ✅ | ✅ |
+| **Error hints** | ✅ | ✅ | ✅ | ✅ |
+| **Preamble injection** | ✅ | ✅ | ✅ | ✅ |
+| **Cost tracking** | ✅ | ✅ | ✅ | ✅ |
+| **Interactive permissions** | ✅ | — | — | — |
+| **Plan mode** | ✅ | — | — | — |
+| **Ask mode (option buttons)** | ✅ | — | — | — |
+| **Diff preview** | ✅ | — | — | — |
+| **Auto-approve safe tools** | ✅ | — | — | — |
+| **Progressive cooldown** | ✅ | — | — | — |
+| **Subscription usage** | ✅ | — | — | — |
+| **Reasoning levels** | — | ✅ | — | — |
+| **Device re-auth (`/auth`)** | — | ✅ | — | — |
+| **Context compaction** | — | — | — | ✅ |
 
 ---
 
@@ -124,6 +148,8 @@ systemctl --user restart untether  # from shell (systemd)
 | `/ctx` | Show or update project/branch context |
 | `/reasoning` | Set reasoning level override |
 | `/trigger` | Set group chat trigger mode |
+| `/stats` | Per-engine session statistics (today/week/all-time) |
+| `/auth` | Codex device re-authentication |
 | `/ping` | Health check / uptime |
 
 Prefix any message with `/<engine>` to pick an engine for that task, or `/<project>` to target a repo:

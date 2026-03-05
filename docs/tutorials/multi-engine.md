@@ -8,12 +8,16 @@ This tutorial shows you how to use different engines for different tasks and set
 
 Different engines have different strengths:
 
-| Engine | Good at |
-|-------|---------|
-| **Codex** | Fast edits, shell commands, quick fixes |
-| **Claude Code** | Complex refactors, architecture, long context |
-| **OpenCode** | Open-source alternative, local models |
-| **Pi** | Conversational, explanations |
+| Engine | Good at | Unique features |
+|-------|---------|----------------|
+| **Claude Code** | Complex refactors, architecture, long context | Interactive permissions, plan mode, ask mode, diff preview |
+| **Codex** | Fast edits, shell commands, quick fixes | Reasoning levels, device re-auth (`/auth`) |
+| **OpenCode** | 75+ providers via Models.dev, local models | Broadest provider support |
+| **Pi** | Multi-provider auth, conversational | Context compaction |
+| **Gemini CLI** | Google models, plan mode, model routing | Auto Pro/Flash routing, sandboxing, extensions |
+| **AMP** | Sourcegraph integration, thread sharing | Mode selection (deep/rush/smart), rich permissions |
+
+See the [engine compatibility matrix](https://github.com/littlebearapps/untether#engine-compatibility) in the README for a full feature-by-feature breakdown.
 
 You might want Codex for quick tasks and Claude for deep work—without manually specifying every time.
 
@@ -81,7 +85,7 @@ Example response:
 !!! untether "Untether"
     engine: claude (chat default)<br>
     defaults: topic: none, chat: claude, project: none, global: codex<br>
-    available: codex, claude, opencode, pi
+    available: codex, claude, opencode, pi, gemini, amp
 
 Clear it:
 
