@@ -338,6 +338,24 @@ def test_snake_case_tool_names() -> None:
     assert events2[0].action.kind == "file_change"
 
 
+def test_build_args_approval_mode_from_run_options() -> None:
+    from untether.runners.run_options import EngineRunOptions, apply_run_options
+
+    runner = GeminiRunner()
+    state = GeminiStreamState()
+    with apply_run_options(EngineRunOptions(permission_mode="plan")):
+        args = runner.build_args("hello", None, state=state)
+    assert "--approval-mode" in args
+    assert "plan" in args
+
+
+def test_build_args_no_approval_mode_by_default() -> None:
+    runner = GeminiRunner()
+    state = GeminiStreamState()
+    args = runner.build_args("hello", None, state=state)
+    assert "--approval-mode" not in args
+
+
 def test_orphan_tool_result_ignored() -> None:
     """A tool_result with no matching tool_use should be ignored."""
     state = GeminiStreamState(session_id="ses1", emitted_started=True)

@@ -14,7 +14,6 @@ Provide the **`gemini`** engine backend so Untether can:
 
 ### Non-goals (v1)
 
-* Interactive approval modes (`--approval-mode default|plan`) — Gemini has no stdin streaming in headless mode.
 * Plan mode interaction — Gemini supports `enter_plan_mode`/`exit_plan_mode` tools but these require interactive stdin.
 
 ---
@@ -53,6 +52,7 @@ Flags:
 * `--output-format stream-json` — JSONL output
 * `--model <model>` — optional, from config or `/config` override
 * `--resume <session_id>` — when resuming a session
+* `--approval-mode <mode>` — optional, passed from `permission_mode` run option (see limitation below)
 
 ---
 
@@ -92,7 +92,7 @@ Exposes `BACKEND = EngineBackend(id="gemini", build_runner=build_runner, install
 #### Runner invocation
 
 ```text
-gemini -p --output-format stream-json [--resume <session_id>] [--model <model>] <prompt>
+gemini -p --output-format stream-json [--resume <session_id>] [--model <model>] [--approval-mode <mode>] <prompt>
 ```
 
 #### Event translation
@@ -138,5 +138,5 @@ Run `gemini` once interactively to authenticate with Google AI Studio or Vertex 
 ## Known pitfalls
 
 * Gemini has no `--stream-json-input` mode, so interactive features (approve/deny, plan mode toggle) are not possible in headless mode.
-* The `--approval-mode` flag exists but has no effect in headless stream-json output — all tools are auto-approved.
+* `--approval-mode` is passed through from `permission_mode` run options but **has no observable effect** in headless `--output-format stream-json` mode — all tools are auto-approved regardless. This is an upstream limitation.
 * Tool names are snake_case (e.g., `read_file`) unlike Claude's PascalCase — the runner normalises these.
