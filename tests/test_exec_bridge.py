@@ -376,13 +376,13 @@ async def test_final_message_includes_ctx_line() -> None:
         runner=runner,
         incoming=IncomingMessage(channel_id=123, message_id=42, text="do it"),
         resume_token=None,
-        context_line="`ctx: untether @feat/api`",
+        context_line="dir: untether @feat/api",
         clock=clock,
     )
 
     assert transport.send_calls
     final_text = transport.send_calls[-1]["message"].text
-    assert "`ctx: untether @feat/api`" in final_text
+    assert "dir: untether @feat/api" in final_text
     assert "codex resume" in final_text.lower()
 
 

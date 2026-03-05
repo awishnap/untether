@@ -297,7 +297,7 @@ def format_meta_line(meta: dict[str, Any]) -> str | None:
     perm = meta.get("permissionMode")
     if isinstance(perm, str) and perm:
         parts.append(perm)
-    return ("\N{LABEL} " + HEADER_SEP.join(parts)) if parts else None
+    return HEADER_SEP.join(parts) if parts else None
 
 
 class MarkdownFormatter:
@@ -354,10 +354,14 @@ class MarkdownFormatter:
 
     def _format_footer(self, state: ProgressState) -> str | None:
         lines: list[str] = []
+        # Combine context + meta into a single 🏷 info line with pipe separators
+        info_parts: list[str] = []
         if state.context_line:
-            lines.append(state.context_line)
+            info_parts.append(state.context_line)
         if state.meta_line:
-            lines.append(state.meta_line)
+            info_parts.append(state.meta_line)
+        if info_parts:
+            lines.append("\N{LABEL} " + " | ".join(info_parts))
         if state.resume_line:
             lines.append(state.resume_line)
         if not lines:

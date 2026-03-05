@@ -14,6 +14,10 @@
 - improve `/auth` info message wording [#70](https://github.com/littlebearapps/untether/issues/70)
 - put Cost & usage and Trigger on same row in `/config` [#71](https://github.com/littlebearapps/untether/issues/71)
 - 5 optimisations from 4-engine test sweep [#72](https://github.com/littlebearapps/untether/issues/72)
+- Gemini CLI `-p` flag compatibility with v0.32.0 (changed from boolean to string argument) [#75](https://github.com/littlebearapps/untether/issues/75)
+- AMP CLI `-x` flag requires prompt as direct argument [#76](https://github.com/littlebearapps/untether/issues/76)
+- AMP CLI uses `--mode` not `--model` for model override [#77](https://github.com/littlebearapps/untether/issues/77)
+- AMP `/threads` table parsing — `threads list`/`search` don't support `--json` [#78](https://github.com/littlebearapps/untether/issues/78)
 
 ### docs
 

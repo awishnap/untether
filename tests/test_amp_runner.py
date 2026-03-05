@@ -292,6 +292,9 @@ def test_build_args_new_session() -> None:
     assert "--stream-json" in args
     assert "--dangerously-allow-all" in args
     assert "threads" not in args
+    # -x takes the prompt as its argument
+    x_idx = args.index("-x")
+    assert args[x_idx + 1] == "hello world"
 
 
 def test_build_args_with_resume() -> None:
@@ -333,6 +336,19 @@ def test_build_args_mode() -> None:
     args = runner.build_args("hello", None, state=state)
     assert "--mode" in args
     assert "rush" in args
+
+
+def test_build_args_model_override_treated_as_mode() -> None:
+    """AMP uses --mode, not --model; model override maps to --mode."""
+    from untether.runners.run_options import EngineRunOptions, apply_run_options
+
+    runner = AmpRunner()
+    state = AmpStreamState()
+    with apply_run_options(EngineRunOptions(model="rush")):
+        args = runner.build_args("hello", None, state=state)
+    assert "--mode" in args
+    assert "rush" in args
+    assert "--model" not in args
 
 
 def test_stdin_payload_returns_none() -> None:
@@ -456,6 +472,44 @@ def test_no_parent_tool_use_id_when_absent() -> None:
     )
     assert len(events) == 1
     assert "parent_tool_use_id" not in events[0].action.detail
+
+
+def test_translate_meta_from_model_config() -> None:
+    """When only model is configured (no mode), meta uses model."""
+    runner = AmpRunner(model="claude-sonnet-4-6")
+    state = AmpStreamState()
+    init_event = _decode_event(
+        {"type": "system", "subtype": "init", "session_id": "T-meta1", "cwd": "/tmp"}
+    )
+    events = runner.translate(init_event, state=state, resume=None, found_session=None)
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.meta is not None
+    assert started.meta["model"] == "claude-sonnet-4-6"
+
+
+def test_translate_meta_mode_overrides_model() -> None:
+    """When both mode and model are configured, mode takes priority."""
+    runner = AmpRunner(model="claude-sonnet-4-6", mode="deep")
+    state = AmpStreamState()
+    init_event = _decode_event(
+        {"type": "system", "subtype": "init", "session_id": "T-meta2", "cwd": "/tmp"}
+    )
+    events = runner.translate(init_event, state=state, resume=None, found_session=None)
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.meta is not None
+    assert started.meta["model"] == "deep"
+
+
+def test_translate_meta_none_when_unconfigured() -> None:
+    """When neither model nor mode is configured, meta is None."""
+    runner = AmpRunner()
+    state = AmpStreamState()
+    init_event = _decode_event(
+        {"type": "system", "subtype": "init", "session_id": "T-meta3", "cwd": "/tmp"}
+    )
+    events = runner.translate(init_event, state=state, resume=None, found_session=None)
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.meta is None
 
 
 def test_orphan_tool_result_ignored() -> None:

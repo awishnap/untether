@@ -38,19 +38,19 @@ class TestFormatMetaLine:
         result = format_meta_line(
             {"model": "claude-sonnet-4-5-20250929", "permissionMode": "plan"}
         )
-        assert result == "\N{LABEL} sonnet \N{MIDDLE DOT} plan"
+        assert result == "sonnet \N{MIDDLE DOT} plan"
 
     def test_already_short_model(self) -> None:
         result = format_meta_line({"model": "opus", "permissionMode": "default"})
-        assert result == "\N{LABEL} opus \N{MIDDLE DOT} default"
+        assert result == "opus \N{MIDDLE DOT} default"
 
     def test_model_only(self) -> None:
         result = format_meta_line({"model": "claude-haiku-4-5-20251001"})
-        assert result == "\N{LABEL} haiku"
+        assert result == "haiku"
 
     def test_permission_only(self) -> None:
         result = format_meta_line({"permissionMode": "plan"})
-        assert result == "\N{LABEL} plan"
+        assert result == "plan"
 
     def test_empty_meta(self) -> None:
         assert format_meta_line({}) is None
@@ -98,7 +98,7 @@ class TestProgressTrackerMeta:
         )
         tracker.note_event(evt)
         state = tracker.snapshot(meta_formatter=format_meta_line)
-        assert state.meta_line == "\N{LABEL} sonnet \N{MIDDLE DOT} plan"
+        assert state.meta_line == "sonnet \N{MIDDLE DOT} plan"
 
     def test_snapshot_without_meta_formatter(self) -> None:
         tracker = ProgressTracker(engine="claude")
@@ -124,9 +124,9 @@ class TestProgressTrackerMeta:
 
 
 class TestFooterWithMetaLine:
-    """Test that _format_footer renders meta_line between context and resume."""
+    """Test that _format_footer combines context + meta into a single 🏷 info line."""
 
-    def test_footer_ordering_ctx_meta_resume(self) -> None:
+    def test_footer_combined_dir_meta_resume(self) -> None:
         tracker = ProgressTracker(engine="claude")
         meta = {"model": "claude-sonnet-4-5-20250929", "permissionMode": "plan"}
         evt = StartedEvent(
@@ -137,7 +137,7 @@ class TestFooterWithMetaLine:
         tracker.note_event(evt)
         state = tracker.snapshot(
             resume_formatter=lambda t: f"`claude --resume {t.value}`",
-            context_line="ctx: untether @master",
+            context_line="dir: untether @master",
             meta_formatter=format_meta_line,
         )
         formatter = MarkdownFormatter()
@@ -146,9 +146,10 @@ class TestFooterWithMetaLine:
         )
         assert parts.footer is not None
         lines = parts.footer.split(HARD_BREAK)
-        assert lines[0] == "ctx: untether @master"
-        assert lines[1] == "\N{LABEL} sonnet \N{MIDDLE DOT} plan"
-        assert lines[2] == "`claude --resume sess-1`"
+        assert (
+            lines[0] == "\N{LABEL} dir: untether @master | sonnet \N{MIDDLE DOT} plan"
+        )
+        assert lines[1] == "`claude --resume sess-1`"
 
     def test_footer_meta_only(self) -> None:
         tracker = ProgressTracker(engine="claude")
@@ -166,8 +167,42 @@ class TestFooterWithMetaLine:
         )
         assert parts.footer == "\N{LABEL} opus"
 
-    def test_footer_no_meta_unchanged(self) -> None:
-        """Without meta, footer behaves exactly as before."""
+    def test_footer_dir_only(self) -> None:
+        """Context line without meta still gets 🏷 prefix."""
+        tracker = ProgressTracker(engine="codex")
+        evt = StartedEvent(
+            engine="codex",
+            resume=ResumeToken(engine="codex", value="t-1"),
+        )
+        tracker.note_event(evt)
+        state = tracker.snapshot(context_line="dir: proj")
+        formatter = MarkdownFormatter()
+        parts = formatter.render_final_parts(
+            state, elapsed_s=5.0, status="done", answer="ok"
+        )
+        assert parts.footer == "\N{LABEL} dir: proj"
+
+    def test_progress_footer_combined(self) -> None:
+        """Progress messages show combined 🏷 dir + model line."""
+        tracker = ProgressTracker(engine="gemini")
+        meta = {"model": "gemini-2.5-pro"}
+        evt = StartedEvent(
+            engine="gemini",
+            resume=ResumeToken(engine="gemini", value="abc123"),
+            meta=meta,
+        )
+        tracker.note_event(evt)
+        state = tracker.snapshot(
+            context_line="dir: my-project",
+            meta_formatter=format_meta_line,
+        )
+        formatter = MarkdownFormatter()
+        parts = formatter.render_progress_parts(state, elapsed_s=3.0)
+        assert parts.footer is not None
+        assert parts.footer == "\N{LABEL} dir: my-project | gemini-2.5-pro"
+
+    def test_footer_no_info_with_resume(self) -> None:
+        """Resume line without context or meta — no 🏷 line, just resume."""
         tracker = ProgressTracker(engine="codex")
         evt = StartedEvent(
             engine="codex",
@@ -176,7 +211,24 @@ class TestFooterWithMetaLine:
         tracker.note_event(evt)
         state = tracker.snapshot(
             resume_formatter=lambda t: f"`codex resume {t.value}`",
-            context_line="ctx: proj @main",
+        )
+        formatter = MarkdownFormatter()
+        parts = formatter.render_final_parts(
+            state, elapsed_s=5.0, status="done", answer="ok"
+        )
+        assert parts.footer == "`codex resume t-1`"
+
+    def test_footer_dir_and_resume_no_meta(self) -> None:
+        """Dir + resume but no model info."""
+        tracker = ProgressTracker(engine="codex")
+        evt = StartedEvent(
+            engine="codex",
+            resume=ResumeToken(engine="codex", value="t-1"),
+        )
+        tracker.note_event(evt)
+        state = tracker.snapshot(
+            resume_formatter=lambda t: f"`codex resume {t.value}`",
+            context_line="dir: proj @main",
         )
         formatter = MarkdownFormatter()
         parts = formatter.render_final_parts(
@@ -185,5 +237,107 @@ class TestFooterWithMetaLine:
         assert parts.footer is not None
         lines = parts.footer.split(HARD_BREAK)
         assert len(lines) == 2
-        assert lines[0] == "ctx: proj @main"
+        assert lines[0] == "\N{LABEL} dir: proj @main"
         assert lines[1] == "`codex resume t-1`"
+
+
+class TestCrossEngineFooter:
+    """Verify the combined 🏷 footer format across all engine types."""
+
+    def _render_footer(
+        self,
+        engine: str,
+        *,
+        meta: dict | None = None,
+        context_line: str | None = None,
+        resume_fmt: str | None = None,
+    ) -> str | None:
+        tracker = ProgressTracker(engine=engine)
+        evt = StartedEvent(
+            engine=engine,
+            resume=ResumeToken(engine=engine, value="tok-1"),
+            meta=meta,
+        )
+        tracker.note_event(evt)
+        state = tracker.snapshot(
+            resume_formatter=(lambda t: resume_fmt) if resume_fmt else None,
+            context_line=context_line,
+            meta_formatter=format_meta_line,
+        )
+        return MarkdownFormatter().render_progress_parts(state, elapsed_s=1.0).footer
+
+    def test_claude_model_and_permission(self) -> None:
+        footer = self._render_footer(
+            "claude",
+            meta={"model": "claude-sonnet-4-5-20250929", "permissionMode": "plan"},
+            context_line="dir: untether @master",
+        )
+        assert footer == "\N{LABEL} dir: untether @master | sonnet \N{MIDDLE DOT} plan"
+
+    def test_gemini_model(self) -> None:
+        footer = self._render_footer(
+            "gemini",
+            meta={"model": "gemini-2.5-pro"},
+            context_line="dir: gemini-test",
+        )
+        assert footer == "\N{LABEL} dir: gemini-test | gemini-2.5-pro"
+
+    def test_amp_with_mode(self) -> None:
+        footer = self._render_footer(
+            "amp",
+            meta={"model": "deep"},
+            context_line="dir: amp-test",
+        )
+        assert footer == "\N{LABEL} dir: amp-test | deep"
+
+    def test_amp_with_model_fallback(self) -> None:
+        footer = self._render_footer(
+            "amp",
+            meta={"model": "claude-sonnet-4-6"},
+            context_line="dir: amp-test",
+        )
+        assert footer == "\N{LABEL} dir: amp-test | sonnet"
+
+    def test_pi_model(self) -> None:
+        footer = self._render_footer(
+            "pi",
+            meta={"model": "gpt-4o", "provider": "openai"},
+            context_line="dir: pi-test",
+        )
+        assert footer == "\N{LABEL} dir: pi-test | gpt-4o"
+
+    def test_codex_model(self) -> None:
+        footer = self._render_footer(
+            "codex",
+            meta={"model": "o3"},
+            context_line="dir: codex-test",
+        )
+        assert footer == "\N{LABEL} dir: codex-test | o3"
+
+    def test_opencode_model(self) -> None:
+        footer = self._render_footer(
+            "opencode",
+            meta={"model": "claude-sonnet-4-5-20250929"},
+            context_line="dir: oc-test",
+        )
+        assert footer == "\N{LABEL} dir: oc-test | sonnet"
+
+    def test_no_model_dir_only(self) -> None:
+        footer = self._render_footer(
+            "amp",
+            meta=None,
+            context_line="dir: amp-test",
+        )
+        assert footer == "\N{LABEL} dir: amp-test"
+
+    def test_no_dir_model_only(self) -> None:
+        footer = self._render_footer(
+            "claude",
+            meta={"model": "opus"},
+            context_line=None,
+        )
+        assert footer == "\N{LABEL} opus"
+
+    def test_neither_dir_nor_model(self) -> None:
+        footer = self._render_footer("codex", meta=None, context_line=None)
+        assert footer is None

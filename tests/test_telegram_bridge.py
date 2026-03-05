@@ -2959,7 +2959,7 @@ async def test_run_main_loop_applies_chat_bound_context(
 
     assert transport.send_calls
     final_text = transport.send_calls[-1]["message"].text
-    assert "`ctx: Beta`" in final_text
+    assert "dir: Beta" in final_text
 
 
 @pytest.mark.anyio

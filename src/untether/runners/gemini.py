@@ -327,7 +327,7 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         args: list[str] = []
         if resume is not None:
             args.extend(["--resume", resume.value])
-        args.extend(["-p", "--output-format", "stream-json"])
+        args.extend(["--output-format", "stream-json"])
         model = self.model
         if run_options is not None and run_options.model:
             model = run_options.model
@@ -335,7 +335,7 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             args.extend(["--model", str(model)])
         if run_options is not None and run_options.permission_mode:
             args.extend(["--approval-mode", run_options.permission_mode])
-        args.append(prompt)
+        args.extend(["-p", prompt])
         return args
 
     def stdin_payload(

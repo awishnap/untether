@@ -109,7 +109,12 @@ def parse_context_line(
             stripped = stripped[1:].strip()
         elif stripped.endswith("`"):
             stripped = stripped[:-1].strip()
-        if not stripped.lower().startswith("ctx:"):
+        # Strip 🏷 emoji prefix from combined info line
+        if stripped.startswith("\N{LABEL} "):
+            stripped = stripped[2:].strip()
+        if not (
+            stripped.lower().startswith("ctx:") or stripped.lower().startswith("dir:")
+        ):
             continue
         content = stripped.split(":", 1)[1].strip()
         if not content:
@@ -142,5 +147,5 @@ def format_context_line(
     project_cfg = projects.projects.get(context.project)
     alias = project_cfg.alias if project_cfg is not None else context.project
     if context.branch:
-        return f"`ctx: {alias} @{context.branch}`"
-    return f"`ctx: {alias}`"
+        return f"dir: {alias} @{context.branch}"
+    return f"dir: {alias}"

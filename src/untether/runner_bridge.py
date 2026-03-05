@@ -522,6 +522,7 @@ class ProgressEdits:
             state = self.tracker.snapshot(
                 resume_formatter=self.resume_formatter,
                 context_line=self.context_line,
+                meta_formatter=format_meta_line,
             )
             rendered = self.presenter.render_progress(
                 state, elapsed_s=now - self.started_at, label=self.label

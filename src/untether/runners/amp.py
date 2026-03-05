@@ -329,17 +329,17 @@ class AmpRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         run_options = get_run_options()
         mode = self.mode
         if run_options is not None and run_options.model:
-            model = run_options.model
-        else:
-            model = self.model
+            # AMP uses --mode (deep/free/rush/smart), not --model.
+            # Treat model override as mode selection.
+            mode = run_options.model
+        if mode is None:
+            mode = self.mode
         if mode:
             args.extend(["--mode", mode])
-        if model:
-            args.extend(["--model", str(model)])
-        args.extend(["-x", "--stream-json"])
+        args.append("--stream-json")
         if self.stream_json_input:
             args.append("--stream-json-input")
-        args.append(prompt)
+        args.extend(["-x", prompt])
         return args
 
     def stdin_payload(
@@ -382,12 +382,15 @@ class AmpRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         found_session: ResumeToken | None,
     ) -> list[UntetherEvent]:
         meta: dict[str, Any] | None = None
-        model = self.model
+        # AMP uses --mode, not --model; show mode in meta line.
+        # Fall back to self.model (the configured model name) when no mode is set.
+        mode = self.mode
         run_options = get_run_options()
         if run_options is not None and run_options.model:
-            model = run_options.model
-        if model is not None:
-            meta = {"model": str(model)}
+            mode = run_options.model
+        model_label = mode or self.model
+        if model_label is not None:
+            meta = {"model": str(model_label)}
         return translate_amp_event(
             data,
             title=self.session_title,

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from untether.commands import CommandContext, CommandResult
+from untether.commands import CommandContext
 from untether.telegram.commands.threads import (
     ThreadsCommand,
     _format_thread_detail,

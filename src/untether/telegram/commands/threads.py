@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import re
 import shutil
 
 import anyio
@@ -21,6 +21,9 @@ _MAX_REGISTRY = 200
 
 # Limits
 _MAX_THREADS = 15
+
+# Pattern for thread IDs in table output
+_THREAD_ID_RE = re.compile(r"(T-[0-9a-f-]{36})")
 
 
 def _register_thread(thread_id: str) -> int:
@@ -57,6 +60,31 @@ async def _run_amp_command(*args: str) -> tuple[int, str, str]:
         result.stdout.decode("utf-8", errors="replace"),
         result.stderr.decode("utf-8", errors="replace"),
     )
+
+
+def _parse_thread_table(stdout: str) -> list[dict]:
+    """Parse AMP's table output into a list of thread dicts.
+
+    Table format:
+    Title                  Last Updated  Visibility  Messages  Thread ID
+    ─────────────────────  ────────────  ──────────  ────────  ──────────
+    Some thread title      1m ago        Private            1  T-019cbc79-...
+    """
+    threads: list[dict] = []
+    for line in stdout.strip().splitlines():
+        # Skip header and separator lines
+        if "─" in line or not line.strip():
+            continue
+        match = _THREAD_ID_RE.search(line)
+        if not match:
+            continue
+        thread_id = match.group(1)
+        # Title is everything before the first multi-space gap
+        # Split on 2+ spaces to find columns
+        parts = re.split(r"\s{2,}", line.strip())
+        title = parts[0] if parts else thread_id
+        threads.append({"id": thread_id, "title": title})
+    return threads
 
 
 def _format_thread_list(
@@ -148,24 +176,12 @@ class ThreadsCommand:
         )
 
     async def _list_threads(self, ctx: CommandContext) -> CommandResult | None:
-        rc, stdout, stderr = await _run_amp_command("threads", "list", "--json")
+        rc, stdout, stderr = await _run_amp_command("threads", "list")
         if rc != 0:
             error = stderr.strip() or f"amp threads list failed (exit {rc})"
             return CommandResult(text=f"Error: {error}", notify=True)
 
-        try:
-            threads = json.loads(stdout) if stdout.strip() else []
-        except json.JSONDecodeError:
-            # Try line-by-line JSONL
-            threads = []
-            for line in stdout.strip().splitlines():
-                try:
-                    threads.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-
-        if not isinstance(threads, list):
-            threads = [threads] if isinstance(threads, dict) else []
+        threads = _parse_thread_table(stdout)
 
         text, buttons = _format_thread_list(threads)
         if buttons:
@@ -186,20 +202,12 @@ class ThreadsCommand:
         if not query:
             return CommandResult(text="Usage: /threads search <query>", notify=True)
 
-        rc, stdout, stderr = await _run_amp_command(
-            "threads", "search", query, "--json"
-        )
+        rc, stdout, stderr = await _run_amp_command("threads", "search", query)
         if rc != 0:
             error = stderr.strip() or f"amp threads search failed (exit {rc})"
             return CommandResult(text=f"Error: {error}", notify=True)
 
-        try:
-            threads = json.loads(stdout) if stdout.strip() else []
-        except json.JSONDecodeError:
-            threads = []
-
-        if not isinstance(threads, list):
-            threads = [threads] if isinstance(threads, dict) else []
+        threads = _parse_thread_table(stdout)
 
         text, buttons = _format_thread_list(threads)
         if buttons:
