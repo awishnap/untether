@@ -199,10 +199,10 @@ Then restart to apply:
 /restart                         # from Telegram (preferred — drains active runs first)
 ```
 
-Or from your terminal — stop the running process (Ctrl+C) and re-run:
+Or from your terminal:
 
 ```sh
-untether
+untether                         # start (or restart — Ctrl+C first if already running)
 ```
 
 > **Note:** If you've set up a systemd service on Linux, use `systemctl --user restart untether` instead.
