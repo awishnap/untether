@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -151,15 +152,27 @@ def test_format_thread_detail_with_metadata() -> None:
 # --- Command handler tests ---
 
 
+@pytest.fixture(autouse=True)
+def _fake_amp_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure shutil.which("amp") returns a path so CLI-check passes."""
+    import untether.telegram.commands.threads as threads_mod
+
+    _real_which = shutil.which
+
+    def _patched_which(name: str, *a: Any, **kw: Any) -> str | None:
+        if name == "amp":
+            return "/usr/local/bin/amp"
+        return _real_which(name, *a, **kw)
+
+    monkeypatch.setattr(threads_mod.shutil, "which", _patched_which)
+
+
 @pytest.mark.anyio
 async def test_threads_no_amp_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     """When amp CLI is not found, return helpful error."""
-    import shutil as _shutil
-
-    monkeypatch.setattr(_shutil, "which", lambda _name: None)
     import untether.telegram.commands.threads as threads_mod
 
-    monkeypatch.setattr(threads_mod, "shutil", _shutil)
+    monkeypatch.setattr(threads_mod.shutil, "which", lambda _name, **kw: None)
 
     cmd = ThreadsCommand()
     ctx = _make_ctx()
@@ -171,7 +184,6 @@ async def test_threads_no_amp_cli(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.anyio
 async def test_threads_usage_with_unknown_subcommand() -> None:
     """Unknown subcommand shows usage."""
-    # We can test the routing without actually running amp
     cmd = ThreadsCommand()
     ctx = _make_ctx("foobar")
     result = await cmd.handle(ctx)
