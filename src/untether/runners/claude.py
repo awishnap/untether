@@ -125,18 +125,20 @@ DISCUSS_COOLDOWN_BASE_SECONDS: float = 30.0
 DISCUSS_COOLDOWN_MAX_SECONDS: float = 120.0
 
 _DISCUSS_ESCALATION_MESSAGE = (
-    "ExitPlanMode was temporarily held — Approve/Deny buttons have been shown to the user "
-    "in Telegram. The user will click Approve when ready.\n\n"
-    "If you haven't written a plan outline yet, write one NOW as your next assistant message "
-    "(at least 15 lines of visible text). The user can ONLY see your assistant text messages.\n\n"
-    "WAIT for the user to approve via the buttons. Do NOT call ExitPlanMode again until they respond."
+    "REJECTED — your ExitPlanMode call was automatically blocked because you have not "
+    "written enough visible text yet.\n\n"
+    "The user is waiting to read your plan outline on their phone. Write it NOW as your "
+    "next assistant message — at least 15 lines of visible text covering files, changes, "
+    "order, and key decisions.\n\n"
+    "Do NOT call ExitPlanMode again until you have written the outline. "
+    "Any further calls without visible outline text will also be rejected."
 )
 
 _OUTLINE_WAIT_MESSAGE = (
     "Your plan outline is now visible to the user in Telegram. "
     "Approve/Deny buttons have been shown — the user will click one when ready.\n\n"
-    "WAIT for the user to click Approve or Deny. "
-    "Do NOT call ExitPlanMode again until they respond."
+    "WAIT for the user to click Approve or Deny. Do NOT call ExitPlanMode again — "
+    "it will be automatically rejected until the user responds via the buttons."
 )
 
 
@@ -627,11 +629,18 @@ def translate_claude_event(
             if isinstance(request, claude_schema.ControlCanUseToolRequest):
                 tool_name = getattr(request, "tool_name", "")
                 if tool_name == "ExitPlanMode" and factory.resume:
-                    escalation_msg = check_discuss_cooldown(factory.resume.value)
-                    if escalation_msg is not None:
-                        session_id = factory.resume.value
-                        text_len = state.max_text_len_since_cooldown
+                    session_id = factory.resume.value
+                    text_len = state.max_text_len_since_cooldown
 
+                    # Guard: if outline is pending but Claude hasn't written
+                    # enough visible text, block ExitPlanMode regardless of
+                    # whether the time-based cooldown has expired.
+                    outline_guard = (
+                        session_id in _OUTLINE_PENDING and text_len < _OUTLINE_MIN_CHARS
+                    )
+
+                    escalation_msg = check_discuss_cooldown(session_id)
+                    if outline_guard or escalation_msg is not None:
                         if text_len >= _OUTLINE_MIN_CHARS:
                             # Outline was written — auto-deny with "wait" message
                             logger.info(
@@ -644,13 +653,15 @@ def translate_claude_event(
                             state.max_text_len_since_cooldown = 0
                             deny_msg = _OUTLINE_WAIT_MESSAGE
                         else:
-                            # Rapid retry without outline — auto-deny with escalation
+                            # Retry without outline — auto-deny with escalation.
+                            # outline_guard catches expired-cooldown retries too.
                             logger.info(
                                 "control_request.discuss_cooldown_deny",
                                 request_id=request_id,
                                 session_id=session_id,
+                                outline_guard=outline_guard,
                             )
-                            deny_msg = escalation_msg
+                            deny_msg = escalation_msg or _DISCUSS_ESCALATION_MESSAGE
 
                         _REQUEST_TO_INPUT.pop(request_id, None)
                         _REQUEST_TO_TOOL_NAME.pop(request_id, None)

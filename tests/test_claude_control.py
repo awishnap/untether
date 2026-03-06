@@ -656,8 +656,8 @@ def test_check_discuss_cooldown_returns_escalation_within_window() -> None:
     set_discuss_cooldown("sess-cd-3")
     result = check_discuss_cooldown("sess-cd-3")
     assert result is not None
-    assert "Approve/Deny buttons" in result
-    assert "WAIT" in result
+    assert "REJECTED" in result
+    assert "ExitPlanMode" in result
 
 
 def test_check_discuss_cooldown_returns_none_when_not_set() -> None:
@@ -735,8 +735,8 @@ def test_exit_plan_mode_auto_denied_during_cooldown() -> None:
     assert "Approve" in buttons[0][0]["text"]
 
 
-def test_exit_plan_mode_not_auto_denied_after_cooldown_expires() -> None:
-    """ExitPlanMode request after cooldown expires is handled normally."""
+def test_exit_plan_mode_blocked_after_cooldown_expires_without_outline() -> None:
+    """ExitPlanMode after cooldown expires but no outline written is still blocked."""
     import time as _time
 
     state, factory = _make_state_with_session("sess-cd-expired")
@@ -761,11 +761,44 @@ def test_exit_plan_mode_not_auto_denied_after_cooldown_expires() -> None:
     )
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
 
-    # Should produce a normal approval-required event (not auto-denied)
+    # Outline guard blocks ExitPlanMode — auto-denied with escalation
+    assert len(state.auto_deny_queue) == 1
+    assert "REJECTED" in state.auto_deny_queue[0][1]
+
+
+def test_exit_plan_mode_allowed_after_cooldown_expires_with_outline() -> None:
+    """ExitPlanMode after cooldown expires WITH outline written falls through to normal flow."""
+    import time as _time
+
+    state, factory = _make_state_with_session("sess-cd-outline")
+    set_discuss_cooldown("sess-cd-outline")
+    # Backdate to expire
+    _, count = _DISCUSS_COOLDOWN["sess-cd-outline"]
+    _DISCUSS_COOLDOWN["sess-cd-outline"] = (
+        _time.time() - DISCUSS_COOLDOWN_BASE_SECONDS - 1,
+        count,
+    )
+    # Simulate outline written
+    state.max_text_len_since_cooldown = 300
+
+    event = _decode_event(
+        {
+            "type": "control_request",
+            "request_id": "req-cd-outline",
+            "request": {
+                "subtype": "can_use_tool",
+                "tool_name": "ExitPlanMode",
+                "input": {},
+            },
+        }
+    )
+    events = translate_claude_event(event, title="claude", state=state, factory=factory)
+
+    # Outline guard is False (text >= 200), cooldown expired → normal 3-button flow
+    assert state.auto_deny_queue == []
     assert len(events) == 1
     assert isinstance(events[0], ActionEvent)
     assert events[0].action.kind == "warning"
-    assert state.auto_deny_queue == []
 
 
 @pytest.mark.anyio
@@ -909,8 +942,8 @@ def test_progressive_cooldown_escalation_message_content() -> None:
 
     msg = check_discuss_cooldown("sess-prog-1")
     assert msg is not None
-    assert "Approve/Deny buttons" in msg
-    assert "WAIT" in msg
+    assert "REJECTED" in msg
+    assert "ExitPlanMode" in msg
 
 
 def test_progressive_cooldown_count_preserved_after_expiry() -> None:
@@ -933,7 +966,7 @@ def test_progressive_cooldown_count_preserved_after_expiry() -> None:
 
     msg = check_discuss_cooldown("sess-prog-2")
     assert msg is not None
-    assert "WAIT" in msg
+    assert "REJECTED" in msg
 
 
 # ===========================================================================
