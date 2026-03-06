@@ -21,8 +21,8 @@ untether --help
 
 ## Two-instance model
 
-!!! note "Linux-specific"
-    The two-instance systemd model below assumes Linux. On macOS or Windows, just run `untether` in a terminal — stop with Ctrl+C and re-run to pick up changes.
+!!! note "systemd is optional"
+    The two-instance systemd model below is a Linux power-user setup. On any platform (including Linux), you can just run `untether` in a terminal — Ctrl+C and re-run to pick up changes.
 
 Untether runs two separate instances on the same machine:
 
@@ -49,10 +49,10 @@ vim src/untether/telegram/commands/my_feature.py
 uv run pytest && uv run ruff check src/
 
 # 3. Restart to pick up changes
-# Linux (systemd):
-systemctl --user restart untether-dev
-journalctl --user -u untether-dev -f
-# macOS/Windows: Ctrl+C the running process, then re-run untether
+uv run untether                      # Ctrl+C first if already running
+# Or on Linux with systemd:
+# systemctl --user restart untether-dev
+# journalctl --user -u untether-dev -f
 
 # 4. Test via @your_dev_bot in Telegram
 ```
@@ -118,9 +118,9 @@ Only after code is merged and released to PyPI:
 uv tool upgrade untether       # or: pipx upgrade untether
 
 # Restart to apply:
-# Preferred (all platforms): send /restart in Telegram, wait for drain
-# Linux (systemd): systemctl --user restart untether
-# macOS/Windows: Ctrl+C the running process, then re-run untether
+/restart                           # from Telegram (preferred — drains active runs)
+# Or from terminal: Ctrl+C first if running, then: untether
+# Or on Linux with systemd: systemctl --user restart untether
 ```
 
 !!! note "Graceful restart"

@@ -26,7 +26,7 @@ Send `/restart` in Telegram to initiate a graceful shutdown:
 1. Untether stops accepting new runs
 2. Active runs are drained (allowed to finish)
 3. The process exits cleanly
-4. Your process supervisor (systemd, etc.) restarts the service
+4. Run `untether` again in your terminal (or your process supervisor restarts it automatically)
 
 !!! tip "Prefer /restart over killing the process"
     `/restart` lets in-progress runs complete before shutting down. Killing the process with `kill` or `systemctl restart` may interrupt active runs and lose work.
@@ -106,12 +106,11 @@ When enabled, Untether watches the config file for changes and reloads most sett
     Send `/restart` in Telegram for a graceful restart with drain visibility.
     Use `/ping` to check the bot is running.
 
-=== "Foreground (macOS / Windows)"
+=== "Terminal (all platforms)"
 
-    If running Untether in a terminal:
+    Stop with Ctrl+C (if running), then:
 
     ```sh
-    # Stop with Ctrl+C, then restart:
     untether
     ```
 
