@@ -148,6 +148,8 @@ class ProgressSettings(BaseModel):
 
     verbosity: Literal["compact", "verbose"] = "compact"
     max_actions: int = Field(default=5, ge=0, le=50)
+    min_render_interval: float = Field(default=2.0, ge=0, le=30)
+    group_chat_rps: float = Field(default=20.0 / 60.0, gt=0, le=10)
 
 
 class UntetherSettings(BaseSettings):

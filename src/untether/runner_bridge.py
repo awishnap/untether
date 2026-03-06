@@ -414,6 +414,7 @@ class ExecBridgeConfig:
     transport: Transport
     presenter: Presenter
     final_notify: bool
+    min_render_interval: float = 0.0
 
 
 @dataclass(slots=True)
@@ -495,6 +496,8 @@ class ProgressEdits:
         label: str = "working",
         context_line: str | None = None,
         thread_id: ThreadId | None = None,
+        min_render_interval: float = 0.0,
+        sleep: Callable[[float], Awaitable[None]] = anyio.sleep,
     ) -> None:
         self.transport = transport
         self.presenter = presenter
@@ -510,6 +513,10 @@ class ProgressEdits:
         self.thread_id = thread_id
         self._approval_notified: bool = False
         self._approval_notify_ref: MessageRef | None = None
+        self._min_render_interval = min_render_interval
+        self._sleep = sleep
+        self._last_render_at: float = 0.0
+        self._has_rendered: bool = False
         self.event_seq = 0
         self.rendered_seq = 0
         self.signal_send, self.signal_recv = anyio.create_memory_object_stream(1)
@@ -517,12 +524,22 @@ class ProgressEdits:
     async def run(self) -> None:
         if self.progress_ref is None:
             return
+        async with anyio.create_task_group() as bg_tg:
+            await self._run_loop(bg_tg)
+
+    async def _run_loop(self, bg_tg: anyio.abc.TaskGroup) -> None:
         while True:
             while self.rendered_seq == self.event_seq:
                 try:
                     await self.signal_recv.receive()
                 except anyio.EndOfStream:
                     return
+
+            # Debounce: never delay the first render; after that, batch events.
+            if self._has_rendered and self._min_render_interval > 0:
+                elapsed_since = self.clock() - self._last_render_at
+                if elapsed_since < self._min_render_interval:
+                    await self._sleep(self._min_render_interval - elapsed_since)
 
             seq_at_render = self.event_seq
             now = self.clock()
@@ -555,20 +572,40 @@ class ProgressEdits:
                         if not a.completed and a.action.detail.get("ask_question"):
                             notify_text = "Question from Claude Code"
                             break
-                    self._approval_notify_ref = await self.transport.send(
-                        channel_id=self.channel_id,
-                        message=RenderedMessage(text=notify_text),
-                        options=SendOptions(
-                            notify=True,
-                            reply_to=self.progress_ref,
-                            thread_id=self.thread_id,
-                        ),
-                    )
+
+                    async def _send_notify(text: str) -> None:
+                        try:
+                            self._approval_notify_ref = await self.transport.send(
+                                channel_id=self.channel_id,
+                                message=RenderedMessage(text=text),
+                                options=SendOptions(
+                                    notify=True,
+                                    reply_to=self.progress_ref,
+                                    thread_id=self.thread_id,
+                                ),
+                            )
+                        except Exception:  # noqa: BLE001
+                            logger.debug(
+                                "progress_edits.notify_send_failed", exc_info=True
+                            )
+
+                    bg_tg.start_soon(_send_notify, notify_text)
                 elif had_approval and not has_approval:
-                    if self._approval_notify_ref is not None:
-                        await self.transport.delete(ref=self._approval_notify_ref)
-                        self._approval_notify_ref = None
+                    ref_to_delete = self._approval_notify_ref
+                    self._approval_notify_ref = None
                     self._approval_notified = False
+                    if ref_to_delete is not None:
+
+                        async def _delete_notify(ref: MessageRef) -> None:
+                            try:
+                                await self.transport.delete(ref=ref)
+                            except Exception:  # noqa: BLE001
+                                logger.debug(
+                                    "progress_edits.notify_delete_failed",
+                                    exc_info=True,
+                                )
+
+                        bg_tg.start_soon(_delete_notify, ref_to_delete)
 
                 if rendered != self.last_rendered:
                     logger.debug(
@@ -584,6 +621,8 @@ class ProgressEdits:
                     )
                     if edited is not None:
                         self.last_rendered = rendered
+                        self._last_render_at = self.clock()
+                        self._has_rendered = True
             except Exception:  # noqa: BLE001
                 # Transport errors (timeouts, network issues) are best-effort —
                 # never crash a run because a progress edit failed to send.
@@ -850,6 +889,7 @@ async def handle_message(
         resume_formatter=runner.format_resume,
         context_line=context_line,
         thread_id=incoming.thread_id,
+        min_render_interval=cfg.min_render_interval,
     )
 
     running_task: RunningTask | None = None

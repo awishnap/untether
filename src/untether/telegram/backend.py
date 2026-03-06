@@ -202,9 +202,9 @@ class TelegramBackend(TransportBackend):
             topics=settings.topics,
             trigger_config=trigger_config,
         )
-        bot = TelegramClient(token)
-        transport = TelegramTransport(bot)
         progress_cfg = _load_progress_settings()
+        bot = TelegramClient(token, group_chat_rps=progress_cfg.group_chat_rps)
+        transport = TelegramTransport(bot)
         formatter = MarkdownFormatter(
             max_actions=progress_cfg.max_actions,
             verbosity=progress_cfg.verbosity,
@@ -217,6 +217,7 @@ class TelegramBackend(TransportBackend):
             transport=transport,
             presenter=presenter,
             final_notify=final_notify,
+            min_render_interval=progress_cfg.min_render_interval,
         )
         cfg = TelegramBridgeConfig(
             bot=bot,

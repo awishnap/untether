@@ -1376,3 +1376,336 @@ async def test_normal_completion_no_outline_guidance() -> None:
 
     final_text = transport.send_calls[-1]["message"].text
     assert "Resume and say" not in final_text
+
+
+# ---------------------------------------------------------------------------
+# Render debounce tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_progress_edits_debounce_skips_first_render() -> None:
+    """First render is never debounced, even with a positive interval."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._min_render_interval = 5.0
+    edits._sleep = fake_sleep
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # First render should not have triggered a sleep
+    assert sleep_calls == []
+    assert len(transport.edit_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_progress_edits_debounce_delays_second_render() -> None:
+    """Second render sleeps for the remaining debounce interval."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+        # Simulate time passing during sleep
+        clock.set(clock() + secs)
+
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._min_render_interval = 2.0
+    edits._sleep = fake_sleep
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            # First render (no debounce)
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            # Advance clock by 0.5s — less than the 2.0s interval
+            clock.set(0.5)
+            presenter.set_no_approval()  # Change output to trigger a real edit
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # Should have slept for ~1.5s (2.0 - 0.5)
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == pytest.approx(1.5, abs=0.1)
+    assert len(transport.edit_calls) == 2
+
+
+@pytest.mark.anyio
+async def test_progress_edits_debounce_zero_interval_no_delay() -> None:
+    """With min_render_interval=0, no debouncing occurs."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._min_render_interval = 0.0
+    edits._sleep = fake_sleep
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            # Advance clock so the rendered text changes (elapsed_s differs)
+            clock.set(5.0)
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    assert sleep_calls == []
+    assert len(transport.edit_calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# Non-blocking approval notification tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_progress_edits_notification_does_not_block_render() -> None:
+    """Approval notification send runs in background, not blocking the render loop."""
+    send_started = anyio.Event()
+    send_proceed = anyio.Event()
+
+    class SlowSendTransport(FakeTransport):
+        async def send(self, **kwargs):
+            send_started.set()
+            await send_proceed.wait()
+            return await super().send(**kwargs)
+
+    transport = SlowSendTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            # Trigger approval buttons → notification send starts in background
+            presenter.set_approval_buttons()
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+
+            # Wait for the slow send to start
+            await send_started.wait()
+
+            # Trigger another event while the send is still pending —
+            # the render loop should NOT be blocked.
+            presenter.set_no_approval()
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            # Unblock the slow send and close
+            send_proceed.set()
+            await anyio.sleep(0)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # Both edits should have been processed (loop wasn't blocked)
+    assert len(transport.edit_calls) >= 2
+
+
+@pytest.mark.anyio
+async def test_progress_edits_debounce_no_delay_when_interval_elapsed() -> None:
+    """No sleep when enough time has passed since the last render."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._min_render_interval = 2.0
+    edits._sleep = fake_sleep
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            # First render
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            # Advance clock well past the interval
+            clock.set(10.0)
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # No sleep needed — interval already elapsed
+    assert sleep_calls == []
+    assert len(transport.edit_calls) == 2
+
+
+@pytest.mark.anyio
+async def test_progress_edits_end_of_stream_exits_during_debounce() -> None:
+    """Closing the signal while waiting to debounce terminates the loop."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._min_render_interval = 999.0  # Very long, would hang if not cancelled
+    edits._sleep = anyio.sleep  # Real sleep — but cancel scope should terminate it
+
+    async with anyio.create_task_group() as tg:
+        edits_scope = anyio.CancelScope()
+
+        async def run_edits() -> None:
+            with edits_scope:
+                await edits.run()
+
+        async def drive() -> None:
+            # First render
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            # Second event, then immediately cancel the scope
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            edits_scope.cancel()
+
+        tg.start_soon(run_edits)
+        tg.start_soon(drive)
+
+    # Should have finished cleanly without hanging
+    assert len(transport.edit_calls) == 1  # Only first render completed
+
+
+@pytest.mark.anyio
+async def test_progress_edits_notification_failure_does_not_crash() -> None:
+    """If the background notification send raises, the run loop continues."""
+
+    class FailingSendTransport(FakeTransport):
+        async def send(self, **kwargs):
+            raise RuntimeError("network error")
+
+    transport = FailingSendTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=0.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            # Trigger approval buttons → notification send will fail
+            presenter.set_approval_buttons()
+            edits.event_seq = 1
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+            await anyio.sleep(0)
+
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # The loop should have completed without crashing
+    assert len(transport.edit_calls) == 1
+    assert edits._approval_notify_ref is None  # send failed, ref stays None
+
+
+@pytest.mark.anyio
+async def test_handle_message_with_min_render_interval() -> None:
+    """Integration: ExecBridgeConfig.min_render_interval flows through to ProgressEdits."""
+    transport = FakeTransport()
+    clock = _FakeClock()
+    runner = ScriptRunner(
+        [
+            Emit(action_started("a1", "command", "echo 1"), at=0.1),
+            Emit(action_started("a2", "command", "echo 2"), at=0.2),
+            Advance(3.0),
+            Return(answer="done"),
+        ],
+        engine=CODEX_ENGINE,
+        advance=clock.set,
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport,
+        presenter=MarkdownPresenter(),
+        final_notify=True,
+        min_render_interval=1.0,
+    )
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=None,
+        clock=clock,
+    )
+
+    # Should complete successfully with the interval set
+    assert any("done" in c["message"].text.lower() for c in transport.send_calls)

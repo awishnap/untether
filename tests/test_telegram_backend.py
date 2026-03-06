@@ -234,7 +234,7 @@ def test_telegram_backend_build_and_run_wires_config(
         captured["kwargs"] = kwargs
 
     class _FakeClient:
-        def __init__(self, token: str) -> None:
+        def __init__(self, token: str, **kwargs: Any) -> None:
             self.token = token
 
         async def close(self) -> None:

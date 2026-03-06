@@ -1,5 +1,18 @@
 # changelog
 
+## v0.33.4 (2026-03-06)
+
+### fixes
+
+- add render debouncing to batch rapid progress events — configurable `min_render_interval` (default 2.0s) prevents flooding Telegram edits [#88](https://github.com/littlebearapps/untether/issues/88)
+  - first render is never debounced; subsequent renders sleep for remaining interval
+  - `group_chat_rps` now configurable in `[progress]` (default 20/60, matching Telegram limit)
+- make approval notification sends non-blocking — `transport.send()` for push notifications runs in a background task instead of stalling the render loop [#88](https://github.com/littlebearapps/untether/issues/88)
+
+### docs
+
+- document `KillMode=process` → `KillMode=control-group` fix for systemd service files — orphaned MCP servers accumulate across restarts, consuming 10+ GB [#88](https://github.com/littlebearapps/untether/issues/88)
+
 ## v0.33.3 (2026-03-06)
 
 ### fixes

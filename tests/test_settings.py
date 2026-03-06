@@ -319,3 +319,66 @@ def test_preamble_rejects_extra_keys(tmp_path: Path) -> None:
     }
     with pytest.raises(ConfigError, match="bogus_key"):
         validate_settings_data(data, config_path=config_path)
+
+
+# ---------------------------------------------------------------------------
+# ProgressSettings field validation
+# ---------------------------------------------------------------------------
+
+
+def test_progress_min_render_interval_defaults(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+    }
+    settings = validate_settings_data(data, config_path=tmp_path / "c.toml")
+    assert settings.progress.min_render_interval == 2.0
+
+
+def test_progress_group_chat_rps_defaults(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+    }
+    settings = validate_settings_data(data, config_path=tmp_path / "c.toml")
+    assert settings.progress.group_chat_rps == pytest.approx(20.0 / 60.0)
+
+
+def test_progress_min_render_interval_custom(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+        "progress": {"min_render_interval": 5.0},
+    }
+    settings = validate_settings_data(data, config_path=tmp_path / "c.toml")
+    assert settings.progress.min_render_interval == 5.0
+
+
+def test_progress_group_chat_rps_custom(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+        "progress": {"group_chat_rps": 0.5},
+    }
+    settings = validate_settings_data(data, config_path=tmp_path / "c.toml")
+    assert settings.progress.group_chat_rps == 0.5
+
+
+def test_progress_min_render_interval_rejects_negative(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+        "progress": {"min_render_interval": -1.0},
+    }
+    with pytest.raises(ConfigError):
+        validate_settings_data(data, config_path=tmp_path / "c.toml")
+
+
+def test_progress_group_chat_rps_rejects_zero(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "tok", "chat_id": 1}},
+        "progress": {"group_chat_rps": 0},
+    }
+    with pytest.raises(ConfigError):
+        validate_settings_data(data, config_path=tmp_path / "c.toml")
