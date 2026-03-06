@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal
 
 import anyio
 
@@ -94,25 +92,15 @@ def _build_versions_line(engine_ids: tuple[str, ...]) -> str | None:
 def _build_startup_message(
     runtime: TransportRuntime,
     *,
-    startup_pwd: str,
     chat_id: int,
-    session_mode: Literal["stateless", "chat"],
-    show_resume_line: bool,
     topics: TelegramTopicsSettings,
     trigger_config: dict | None = None,
-    voice_transcription: bool = False,
-    files_enabled: bool = False,
 ) -> str:
     project_aliases = sorted(set(runtime.project_aliases()), key=str.lower)
 
-    # Hard break (two trailing spaces + newline) forces line breaks in CommonMark
-    BR = "  \n"
-
     header = f"\N{DOG} **untether v{__version__} is ready**"
 
-    details: list[str] = [f"default: `{runtime.default_engine}`"]
-
-    # engines — always shown
+    # engine — merged default + available on one line
     available_engines = list(runtime.available_engine_ids())
     missing_engines = list(runtime.missing_engine_ids())
     misconfigured_engines = list(runtime.engine_ids_with_status("bad_config"))
@@ -125,10 +113,15 @@ def _build_startup_message(
     if failed_engines:
         engine_notes.append(f"failed to load: {', '.join(failed_engines)}")
     engine_list = ", ".join(available_engines) if available_engines else "none"
+
+    details: list[str] = []
     if engine_notes:
-        details.append(f"engines: `{engine_list} ({'; '.join(engine_notes)})`")
+        details.append(
+            f"engine: `{runtime.default_engine}`"
+            f" · engines: `{engine_list} ({'; '.join(engine_notes)})`"
+        )
     else:
-        details.append(f"engines: `{engine_list}`")
+        details.append(f"engine: `{runtime.default_engine}` · engines: `{engine_list}`")
 
     # projects — listed by name
     if project_aliases:
@@ -136,10 +129,7 @@ def _build_startup_message(
     else:
         details.append("projects: `none`")
 
-    # mode
-    details.append(f"mode: `{session_mode}`")
-
-    # topics
+    # topics — only shown when enabled
     if topics.enabled:
         resolved_scope, _ = _resolve_topics_scope_raw(
             topics.scope, chat_id, runtime.project_chat_ids()
@@ -148,34 +138,20 @@ def _build_startup_message(
             f"auto ({resolved_scope})" if topics.scope == "auto" else resolved_scope
         )
         details.append(f"topics: `enabled (scope={scope_label})`")
-    else:
-        details.append("topics: `disabled`")
 
-    # triggers
+    # triggers — only shown when enabled
     if trigger_config and trigger_config.get("enabled"):
         n_wh = len(trigger_config.get("webhooks", []))
         n_cr = len(trigger_config.get("crons", []))
         details.append(f"triggers: `enabled ({n_wh} webhooks, {n_cr} crons)`")
-    else:
-        details.append("triggers: `disabled`")
 
-    # resume lines
-    details.append(f"resume lines: `{'shown' if show_resume_line else 'hidden'}`")
+    _DOCS_URL = "https://littlebearapps.com/tools/untether/"
+    footer = (
+        f"\n\nSend a message to start, or /config for settings."
+        f"\n\N{OPEN BOOK} [Click here for help guide]({_DOCS_URL})"
+    )
 
-    # voice
-    details.append(f"voice: `{'enabled' if voice_transcription else 'disabled'}`")
-
-    # files
-    details.append(f"files: `{'enabled' if files_enabled else 'disabled'}`")
-
-    details.append(f"working in: `{startup_pwd}`")
-
-    # CLI versions (non-blocking, fault-tolerant)
-    versions_line = _build_versions_line(tuple(available_engines))
-    if versions_line:
-        details.append(f"versions: `{versions_line}`")
-
-    return header + "\n\n" + BR.join(details)
+    return header + "\n\n" + "\n\n".join(details) + footer
 
 
 class TelegramBackend(TransportBackend):
@@ -222,14 +198,9 @@ class TelegramBackend(TransportBackend):
 
         startup_msg = _build_startup_message(
             runtime,
-            startup_pwd=os.getcwd(),
             chat_id=chat_id,
-            session_mode=settings.session_mode,
-            show_resume_line=settings.show_resume_line,
             topics=settings.topics,
             trigger_config=trigger_config,
-            voice_transcription=settings.voice_transcription,
-            files_enabled=settings.files.enabled,
         )
         bot = TelegramClient(token)
         transport = TelegramTransport(bot)

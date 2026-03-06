@@ -294,6 +294,10 @@ def translate_gemini_event(
         )
         return out
 
+    logger.debug(
+        "gemini.event.unrecognised",
+        event_type=type(event).__name__,
+    )
     return out
 
 

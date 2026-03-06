@@ -8,6 +8,9 @@ from typing import Any
 from collections.abc import Callable
 
 from .ids import ID_PATTERN, is_valid_id
+from .logging import get_logger
+
+logger = get_logger(__name__)
 
 ENGINE_GROUP = "untether.engine_backends"
 TRANSPORT_GROUP = "untether.transport_backends"
@@ -53,6 +56,12 @@ def _error_key(error: PluginLoadError) -> tuple[str, str, str, str | None, str]:
 def _record_error(error: PluginLoadError) -> None:
     key = _error_key(error)
     _LOAD_ERRORS.setdefault(key, error)
+    logger.warning(
+        "plugin.load_error",
+        group=error.group,
+        name=error.name,
+        error=error.error,
+    )
 
 
 def get_load_errors() -> tuple[PluginLoadError, ...]:

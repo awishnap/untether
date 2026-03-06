@@ -168,6 +168,7 @@ class TelegramOutbox:
             await self._sleep(delay)
 
     async def run(self) -> None:
+        logger.info("outbox.worker.started")
         cancel_exc = anyio.get_cancelled_exc_class()
         try:
             while True:

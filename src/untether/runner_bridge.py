@@ -112,9 +112,11 @@ def _apply_preamble(prompt: str) -> str:
     """Prepend the context preamble to the prompt if enabled."""
     cfg = _load_preamble_settings()
     if not cfg.enabled:
+        logger.debug("preamble.disabled")
         return prompt
     text = cfg.text if cfg.text is not None else _DEFAULT_PREAMBLE
     if not text:
+        logger.debug("preamble.disabled")
         return prompt
 
     # Append AskUserQuestion guidance based on per-chat toggle
@@ -134,6 +136,7 @@ def _apply_preamble(prompt: str) -> str:
             "with clear options. The user will see interactive buttons to choose from."
         )
 
+    logger.info("preamble.applied", preamble_len=len(text))
     return f"{text}\n\n---\n\n{prompt}"
 
 
@@ -305,7 +308,11 @@ def _check_cost_budget(usage: dict[str, Any] | None) -> str | None:
         if alert is not None:
             return format_cost_alert(alert)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("cost_budget.check_failed", error=str(exc))
+        logger.warning(
+            "cost_budget.check_failed",
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+        )
     return None
 
 
@@ -341,7 +348,7 @@ def _record_export_event(
                 record_session_usage(session_id, evt.usage, channel_id=channel_id)
         record_session_event(session_id, event_dict, channel_id=channel_id)
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
+        logger.warning(
             "export_event.record_failed",
             error=str(exc),
             error_type=exc.__class__.__name__,

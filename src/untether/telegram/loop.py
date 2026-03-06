@@ -1209,9 +1209,16 @@ async def run_main_loop(
                     )
 
                     # Wait for all runs to complete (up to drain timeout)
+                    _drain_tick = 0
                     with anyio.move_on_after(DRAIN_TIMEOUT_S):
                         while state.running_tasks:
                             await sleep(1.0)
+                            _drain_tick += 1
+                            if _drain_tick % 10 == 0:
+                                logger.info(
+                                    "shutdown.drain.progress",
+                                    remaining=len(state.running_tasks),
+                                )
 
                     remaining = len(state.running_tasks)
                     if remaining > 0:

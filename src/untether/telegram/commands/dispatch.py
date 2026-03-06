@@ -81,6 +81,7 @@ async def _dispatch_command(
         sender_id=msg.sender_id,
         raw=msg.raw,
     )
+    logger.info("command.dispatch", command=command_id, chat_id=chat_id)
     try:
         backend = get_command(command_id, allowlist=allowlist, required=False)
     except ConfigError as exc:
@@ -166,6 +167,7 @@ async def _dispatch_callback(
         sender_id=msg.sender_id,
         raw=msg.raw,
     )
+    logger.info("callback.dispatch", command=command_id, chat_id=chat_id)
     _answered = False
 
     async def _answer_callback(text: str | None = None) -> None:
@@ -192,6 +194,11 @@ async def _dispatch_callback(
             toast = backend.early_answer_toast(args_text)  # type: ignore[attr-defined]
             if toast is not None:
                 await _answer_callback(toast)
+                logger.debug(
+                    "callback.early_answered",
+                    command=command_id,
+                    toast=toast,
+                )
 
         # For callbacks, text is the full callback data and args come from parsing
         text = msg.data or ""

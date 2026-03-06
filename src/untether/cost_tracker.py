@@ -63,6 +63,13 @@ def check_run_budget(
     """
     if budget.max_cost_per_run is not None and run_cost > 0:
         if run_cost >= budget.max_cost_per_run:
+            logger.error(
+                "cost_budget.exceeded",
+                scope="per_run",
+                run_cost=run_cost,
+                budget=budget.max_cost_per_run,
+                auto_cancel=budget.auto_cancel,
+            )
             return CostAlert(
                 level="exceeded",
                 message=(
@@ -73,6 +80,13 @@ def check_run_budget(
             )
         ratio = run_cost / budget.max_cost_per_run * 100
         if ratio >= budget.warn_at_pct:
+            logger.warning(
+                "cost_budget.alert",
+                scope="per_run",
+                run_cost=run_cost,
+                budget=budget.max_cost_per_run,
+                ratio=round(ratio, 1),
+            )
             return CostAlert(
                 level="warning",
                 message=(
@@ -84,6 +98,13 @@ def check_run_budget(
     if budget.max_cost_per_day is not None:
         daily = get_daily_cost()
         if daily >= budget.max_cost_per_day:
+            logger.error(
+                "cost_budget.exceeded",
+                scope="per_day",
+                daily_cost=daily,
+                budget=budget.max_cost_per_day,
+                auto_cancel=budget.auto_cancel,
+            )
             return CostAlert(
                 level="exceeded",
                 message=(
@@ -94,6 +115,13 @@ def check_run_budget(
             )
         ratio = daily / budget.max_cost_per_day * 100
         if ratio >= budget.warn_at_pct:
+            logger.warning(
+                "cost_budget.alert",
+                scope="per_day",
+                daily_cost=daily,
+                budget=budget.max_cost_per_day,
+                ratio=round(ratio, 1),
+            )
             return CostAlert(
                 level="warning",
                 message=(

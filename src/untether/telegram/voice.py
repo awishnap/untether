@@ -108,3 +108,15 @@ async def transcribe_voice(
         )
         await reply(text=str(exc).strip() or "voice transcription failed")
         return None
+    except TimeoutError as exc:
+        logger.error("voice.transcribe.timeout", error=str(exc))
+        await reply(text="voice transcription timed out")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "voice.transcribe.unexpected",
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+        )
+        await reply(text=str(exc).strip() or "voice transcription failed")
+        return None

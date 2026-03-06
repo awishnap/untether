@@ -50,7 +50,7 @@ When you tap a setting button:
 
 Some settings are engine-specific and only appear when relevant:
 
-- **Plan mode** — only available for Claude Code. Hidden for other engines; the sub-page shows "Only available for Claude Code" with a Back button.
+- **Plan mode** — available for Claude Code and Gemini CLI. Hidden for other engines; the sub-page shows a "not available" message with a Back button.
 - **Ask mode** — only available for Claude Code. When enabled, Claude can ask interactive questions with option buttons instead of guessing. Hidden for other engines.
 - **Reasoning** — only available for engines that support reasoning levels (currently Codex). Hidden for Claude, OpenCode, and Pi.
 - **Model** — always visible. Shows the current model override and lets you clear it. To set a model, use `/model set <name>`.

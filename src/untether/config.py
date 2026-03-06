@@ -146,5 +146,9 @@ def write_config(config: dict[str, Any], path: Path) -> None:
                 tmp_path.unlink()
             except FileNotFoundError:
                 pass
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug(
+                    "config.write.cleanup_failed",
+                    path=str(tmp_path),
+                    error=str(exc),
+                )

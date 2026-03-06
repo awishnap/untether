@@ -11,7 +11,7 @@ worktree-based runs via `@branch`.
 - If no projects are configured, Untether runs in the startup working directory.
 - If a project is configured, `@branch` resolves/creates a git worktree and runs
   the task in that worktree.
-- Progress/final messages include a `ctx:` footer when project context is active.
+- Progress/final messages include a `dir:` footer when project context is active.
 
 ## Config schema (relevant subset)
 
@@ -102,21 +102,21 @@ Rules:
   non-directive token.
 - At most one engine directive, one project directive, and one `@branch` are
   allowed (duplicates are errors).
-- If a reply contains a `ctx:` line, Untether **ignores new directives** and uses
+- If a reply contains a `dir:` line, Untether **ignores new directives** and uses
   the reply context.
 
-## Context footer (`ctx:`)
+## Context footer (`dir:`)
 
-When a run has project context, Untether appends a footer line rendered as inline
-code (backticked):
+When a run has project context, Untether appends a footer as part of the `🏷` info line:
 
-- With branch: `` `ctx: <project> @<branch>` ``
-- Without branch: `` `ctx: <project>` ``
+- With branch: `dir: <project> @<branch>`
+- Without branch: `dir: <project>`
 
-The `ctx:` line is parsed from replies and takes precedence over new directives.
+The `dir:` line is parsed from replies and takes precedence over new directives.
+For backwards compatibility, Untether also accepts the older `ctx:` format when parsing replies.
 
 When a message arrives in a chat whose `chat_id` matches `projects.<alias>.chat_id`,
-Untether defaults the project context to that alias unless a reply `ctx:` or explicit
+Untether defaults the project context to that alias unless a reply `dir:` or explicit
 `/<project-alias>` directive is present.
 
 In non-topic chats, `/ctx` can bind a chat context. That bound context is treated as
@@ -174,5 +174,5 @@ Start a new thread in a worktree:
 Reply to a progress message to continue in the same context:
 
 ```
-ctx: z80 @feat/streaming
+dir: z80 @feat/streaming
 ```

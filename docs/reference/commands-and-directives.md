@@ -17,18 +17,18 @@ Notes:
 
 - Directives are only parsed at the start of the first non-empty line.
 - Parsing stops at the first non-directive token.
-- If a reply contains a `ctx:` line, Untether ignores new directives and uses the reply context.
+- If a reply contains a `dir:` line, Untether ignores new directives and uses the reply context.
 
 See [Context resolution](context-resolution.md) for the full rules.
 
-## Context footer (`ctx:`)
+## Context footer (`dir:`)
 
-When a run has project context, Untether appends a footer line rendered as inline code:
+When a run has project context, Untether appends a footer line as part of the `🏷` info line:
 
-- With branch: `` `ctx: <project> @<branch>` ``
-- Without branch: `` `ctx: <project>` ``
+- With branch: `dir: <project> @<branch>`
+- Without branch: `dir: <project>`
 
-This line is parsed from replies and takes precedence over new directives.
+This line is parsed from replies and takes precedence over new directives. For backwards compatibility, Untether also accepts the older `ctx:` format when parsing replies.
 
 ## Telegram in-chat commands
 

@@ -8,6 +8,8 @@ from ...transport import RenderedMessage
 
 logger = get_logger(__name__)
 
+_DOCS_BASE = "https://littlebearapps.com/tools/untether/how-to/"
+
 
 def _is_callback(ctx: CommandContext) -> bool:
     """Detect if this invocation is a callback (edit in-place) vs text command."""
@@ -74,6 +76,36 @@ async def _resolve_effective_engine(
 # ---------------------------------------------------------------------------
 # Home page
 # ---------------------------------------------------------------------------
+
+_HOME_HINTS: dict[str, dict[str, str]] = {
+    "pm": {
+        "on": "approve actions",
+        "off": "run freely",
+        "auto": "auto-approve actions",
+    },
+    "aq": {
+        "on": "interactive questions",
+        "default": "interactive questions",
+        "off": "agent guesses",
+    },
+    "dp": {
+        "on": "show code changes",
+        "default": "show code changes",
+        "off": "buttons only",
+    },
+    "vb": {
+        "on": "detailed progress",
+        "off": "compact progress",
+        "default": "compact progress",
+    },
+    "tr": {"all": "respond to everything", "mentions": "@mention only"},
+}
+
+
+def _home_hint(setting: str, value: str) -> str:
+    """Return a micro-description suffix for the home page, or empty string."""
+    hint = _HOME_HINTS.get(setting, {}).get(value, "")
+    return f"  · {hint}" if hint else ""
 
 
 async def _page_home(ctx: CommandContext) -> None:
@@ -163,33 +195,48 @@ async def _page_home(ctx: CommandContext) -> None:
     )
 
     lines = [
-        "<b>⚙️ Settings</b>",
+        "\N{DOG} <b>Untether settings</b>",
         "",
     ]
+
+    # --- Agent controls (Claude-only features) ---
     if show_plan_mode:
-        lines.append(f"Plan mode: <b>{pm_label}</b>")
-    if show_ask_questions:
-        lines.append(f"Ask mode: <b>{aq_label}</b>")
-    if show_diff_preview:
-        lines.append(f"Diff preview: <b>{dp_label}</b>")
+        lines.append("<b>Agent controls</b> <i>(Claude Code)</i>")
+        lines.append(f"Plan mode: <b>{pm_label}</b>{_home_hint('pm', pm_label)}")
+        if show_ask_questions:
+            lines.append(f"Ask mode: <b>{aq_label}</b>{_home_hint('aq', aq_label)}")
+        if show_diff_preview:
+            lines.append(f"Diff preview: <b>{dp_label}</b>{_home_hint('dp', dp_label)}")
+        lines.append("")
+
+    # --- Display ---
+    lines.append("<b>Display</b>")
     if show_cost_usage:
         lines.append(f"Cost & usage: <b>{cu_label}</b>")
-    lines.extend(
-        [
-            f"Verbose: <b>{verbose_label}</b>",
-            f"Engine: <b>{engine_label}</b>",
-            f"Model: <b>{model_label}</b>",
-            f"Trigger: <b>{trigger_label}</b>",
-        ]
-    )
+    lines.append(f"Verbose: <b>{verbose_label}</b>{_home_hint('vb', verbose_label)}")
+    lines.append("")
+
+    # --- Routing ---
+    lines.append("<b>Routing</b>")
+    lines.append(f"Engine: <b>{engine_label}</b>")
+    lines.append(f"Model: <b>{model_label}</b>")
+    lines.append(f"Trigger: <b>{trigger_label}</b>{_home_hint('tr', trigger_label)}")
     if show_reasoning:
         lines.append(f"Reasoning: <b>{reasoning_label}</b>")
 
-    _DOCS_URL = "https://github.com/littlebearapps/untether#-quick-start"
+    _DOCS_SETTINGS = f"{_DOCS_BASE}inline-settings/"
+    _DOCS_TROUBLE = f"{_DOCS_BASE}troubleshooting/"
+    lines.append("")
     lines.append(
-        f"\nFor help, see the user guide and how-to docs "
-        f'in the <a href="{_DOCS_URL}">Untether repo</a>.'
+        f'📖 <a href="{_DOCS_SETTINGS}">Settings guide</a>'
+        f' · <a href="{_DOCS_TROUBLE}">Troubleshooting</a>'
     )
+
+    from ..backend import _build_versions_line
+
+    versions_line = _build_versions_line(tuple(ctx.runtime.engine_ids))
+    if versions_line:
+        lines.append(f"<code>{versions_line}</code>")
 
     buttons: list[list[dict[str, str]]] = []
 
@@ -323,12 +370,17 @@ async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None
     lines = [
         "<b>⚙️ Plan mode</b>",
         "",
-        "Controls Claude Code permission prompt behaviour.",
-        "• <b>off</b> — no tool approval needed",
-        "• <b>on</b> — approve every tool call",
-        "• <b>auto</b> — approve, auto-accept ExitPlanMode",
+        "Review and approve each action before it runs.",
+        "",
+        "• <b>off</b> — run freely, no approval needed",
+        "• <b>on</b> — ask before every action (safest)",
+        "• <b>auto</b> — approve actions, ask before finalising plans",
+        "",
+        "Works with: Claude Code",
         "",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}plan-mode/">Learn more</a>',
     ]
 
     buttons = [
@@ -392,11 +444,16 @@ async def _page_verbose(ctx: CommandContext, action: str | None = None) -> None:
     lines = [
         "<b>⚙️ Verbose progress</b>",
         "",
-        "Controls detail level in progress messages.",
-        "• <b>on</b> — show file paths, commands, patterns",
-        "• <b>off</b> — compact action names only",
+        "Choose how much detail to show while the agent is working.",
+        "",
+        "• <b>on</b> — show file paths, commands, and search patterns",
+        "• <b>off</b> — show action names only (default)",
+        "",
+        "Works with: all engines",
         "",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}verbose-progress/">Learn more</a>',
     ]
 
     buttons = [
@@ -457,9 +514,12 @@ async def _page_engine(ctx: CommandContext, action: str | None = None) -> None:
     lines = [
         "<b>⚙️ Default engine</b>",
         "",
-        "Override the engine for this chat.",
+        "Choose which coding agent runs your tasks in this chat.",
+        "The global default is used unless you override it here.",
         "",
         f"Current: <b>{effective_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}switch-engines/">Learn more</a>',
     ]
 
     engine_buttons = [
@@ -526,11 +586,16 @@ async def _page_trigger(ctx: CommandContext, action: str | None = None) -> None:
     lines = [
         "<b>⚙️ Trigger mode</b>",
         "",
-        "Controls how the bot responds in group chats.",
-        "• <b>all</b> — respond to every message",
+        "Control when the bot responds in group chats.",
+        "",
+        "• <b>all</b> — respond to every message (default)",
         "• <b>mentions</b> — only respond when @mentioned",
         "",
+        "Works with: all engines",
+        "",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}group-chat/">Learn more</a>',
     ]
 
     buttons = [
@@ -602,11 +667,15 @@ async def _page_model(ctx: CommandContext, action: str | None = None) -> None:
     lines = [
         "<b>⚙️ Model</b>",
         "",
-        "Per-engine model override for this chat.",
+        "Override the AI model used by the current engine.",
+        "Each engine has its own default model.",
+        "",
         f"Engine: <b>{current_engine}</b>",
         f"Current: <b>{current_label}</b>",
         "",
-        "Use <code>/model set &lt;name&gt;</code> to set a specific model.",
+        "Use <code>/model set &lt;name&gt;</code> to choose a model.",
+        "",
+        f'📖 <a href="{_DOCS_BASE}model-reasoning/">Learn more</a>',
     ]
 
     buttons = [
@@ -708,13 +777,19 @@ async def _page_reasoning(ctx: CommandContext, action: str | None = None) -> Non
     lines = [
         "<b>⚙️ Reasoning</b>",
         "",
-        "Controls reasoning effort level.",
-        "• <b>minimal</b> — fastest, least reasoning",
-        "• <b>low</b> / <b>medium</b> / <b>high</b>",
-        "• <b>xhigh</b> — most thorough reasoning",
+        "How deeply the model thinks before answering.",
+        "Higher = more thorough but slower and costlier.",
+        "",
+        "• <b>minimal</b> — fastest responses",
+        "• <b>low</b> · <b>medium</b> · <b>high</b> — balanced options",
+        "• <b>xhigh</b> — most thorough (slowest)",
+        "",
+        "Works with: Codex",
         "",
         f"Engine: <b>{current_engine}</b>",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}model-reasoning/">Learn more</a>',
     ]
 
     buttons = [
@@ -848,12 +923,17 @@ async def _page_ask_questions(ctx: CommandContext, action: str | None = None) ->
     lines = [
         "<b>⚙️ Ask mode</b>",
         "",
-        "When enabled, Claude Code can ask interactive",
-        "questions with option buttons instead of guessing.",
-        "• <b>on</b> — show questions with option buttons",
-        "• <b>off</b> — Claude proceeds with defaults",
+        "Let the agent ask you questions mid-task instead of guessing.",
+        "Answers appear as tappable buttons.",
+        "",
+        "• <b>on</b> — questions shown with option buttons (default)",
+        "• <b>off</b> — agent makes its best guess and continues",
+        "",
+        "Works with: Claude Code",
         "",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}inline-settings/">Learn more</a>',
     ]
 
     buttons = [
@@ -968,11 +1048,17 @@ async def _page_diff_preview(ctx: CommandContext, action: str | None = None) -> 
     lines = [
         "<b>⚙️ Diff preview</b>",
         "",
-        "Shows compact diffs in tool approval messages.",
-        "• <b>on</b> — show Edit/Write diffs and Bash commands",
-        "• <b>off</b> — approval buttons only, no preview",
+        "See what the agent wants to change before you approve it.",
+        "Shows a compact diff of edits and commands.",
+        "",
+        "• <b>on</b> — show code changes in approval messages (default)",
+        "• <b>off</b> — show approval buttons only",
+        "",
+        "Works with: Claude Code",
         "",
         f"Current: <b>{current_label}</b>",
+        "",
+        f'📖 <a href="{_DOCS_BASE}interactive-approval/">Learn more</a>',
     ]
 
     buttons = [
@@ -1078,17 +1164,18 @@ async def _page_cost_usage(ctx: CommandContext, action: str | None = None) -> No
     if has_api_cost:
         ac_label = "on" if ac is True else ("off" if ac is False else "default")
         lines.append(f"<b>API cost</b>: {ac_label}")
-        lines.append("  Show run cost, tokens, and duration in the footer.")
-        engines = "Claude, OpenCode"
-        lines.append(f"  Works with: {engines}")
+        lines.append("  Show cost, tokens, and time after each task.")
+        lines.append("  Works with: Claude, OpenCode, Gemini, Amp")
         lines.append("")
 
     if has_sub_usage:
         su_label = "on" if su is True else ("off" if su is False else "default")
         lines.append(f"<b>Subscription usage</b>: {su_label}")
-        lines.append("  Show 5h/weekly subscription quota in the footer.")
+        lines.append("  Show how much of your 5h/weekly quota is used.")
         lines.append("  Works with: Claude (Pro/Max plans)")
         lines.append("")
+
+    lines.append(f'📖 <a href="{_DOCS_BASE}cost-budgets/">Learn more</a>')
 
     buttons: list[list[dict[str, str]]] = []
 

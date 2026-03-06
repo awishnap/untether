@@ -11,7 +11,9 @@ from ..markdown import MarkdownParts, assemble_markdown_parts
 
 MAX_BODY_CHARS = 3500
 
-_MD_RENDERER = MarkdownIt("commonmark", {"html": False})
+_MD_RENDERER = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable(
+    "linkify"
+)
 _BULLET_RE = re.compile(r"(?m)^(\s*)•")
 _FENCE_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>[`~]{3,})(?P<info>.*)$")
 _ORDERED_ITEM_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?P<marker>\d+[.)])\s+")

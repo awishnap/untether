@@ -209,6 +209,7 @@ def translate_opencode_event(
 
     if isinstance(session_id, str) and session_id and state.session_id is None:
         state.session_id = session_id
+        logger.debug("opencode.session.extracted", session_id=session_id)
 
     match event:
         case opencode_schema.StepStart():
@@ -371,6 +372,10 @@ def translate_opencode_event(
             ]
 
         case _:
+            logger.debug(
+                "opencode.event.unrecognised",
+                event_type=type(event).__name__,
+            )
             return []
 
 

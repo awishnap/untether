@@ -45,7 +45,7 @@ echo ".worktrees/" >> ~/.config/git/ignore
 
 ## Context persistence
 
-When project/worktree context is active, Untether includes a `ctx:` footer in messages.
+When project/worktree context is active, Untether includes a `dir:` footer in messages.
 When you reply, this context carries forward (you usually don’t need to repeat `/<project-alias> @branch`).
 
 ## Related

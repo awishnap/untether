@@ -418,7 +418,9 @@ def _load_settings_from_path(cfg_path: Path) -> UntetherSettings:
         {"model_config": SettingsConfigDict(**cfg)},
     )
     try:
-        return Bound()
+        settings = Bound()
+        logger.info("config.loaded", path=str(cfg_path))
+        return settings
     except ValidationError as exc:
         raise ConfigError(f"Invalid config in {cfg_path}: {exc}") from exc
     except Exception as exc:  # pragma: no cover - safety net

@@ -43,15 +43,12 @@ def test_build_startup_message_includes_missing_engines(tmp_path: Path) -> None:
 
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
 
     assert "untether" in message and "is ready" in message
-    assert "engines: `codex (not installed: pi)`" in message
+    assert "not installed: pi" in message
     assert "projects: `none`" in message
 
 
@@ -86,10 +83,7 @@ def test_build_startup_message_surfaces_unavailable_engine_reasons(
 
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
 
@@ -112,84 +106,66 @@ def _build_healthy_runtime() -> TransportRuntime:
     )
 
 
-def test_startup_message_includes_version(tmp_path: Path) -> None:
+def test_startup_message_includes_version() -> None:
     runtime = _build_healthy_runtime()
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
     assert f"v{__version__}" in message
 
 
-def test_startup_message_uses_dog_emoji(tmp_path: Path) -> None:
+def test_startup_message_uses_dog_emoji() -> None:
     runtime = _build_healthy_runtime()
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
     assert "\N{DOG}" in message
     assert "\N{OCTOPUS}" not in message
 
 
-def test_startup_message_minimal_when_healthy(tmp_path: Path) -> None:
-    """When everything is healthy, show all status fields."""
+def test_startup_message_core_fields() -> None:
+    """When everything is healthy, show core status fields."""
     runtime = _build_healthy_runtime()
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
-    assert "default: `claude`" in message
+    assert "engine: `claude`" in message
     assert "engines: `claude`" in message
     assert "projects: `none`" in message
-    assert "mode: `stateless`" in message
-    assert "topics: `disabled`" in message
-    assert "triggers: `disabled`" in message
-    assert "resume lines: `shown`" in message
-    assert "voice: `disabled`" in message
-    assert "files: `disabled`" in message
-    assert "working in:" in message
+    # Disabled topics/triggers should NOT appear
+    assert "topics:" not in message
+    assert "triggers:" not in message
+    # Quick-start hint and help link
+    assert "/config" in message
+    assert "littlebearapps.com" in message
 
 
-def test_startup_message_shows_mode_chat(tmp_path: Path) -> None:
+def test_startup_message_shows_topics_when_enabled() -> None:
     runtime = _build_healthy_runtime()
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="chat",
-        show_resume_line=True,
-        topics=TelegramTopicsSettings(),
+        topics=TelegramTopicsSettings(enabled=True, scope="main"),
     )
-    assert "mode: `chat`" in message
+    assert "topics:" in message
 
 
-def test_startup_message_voice_and_files_enabled(tmp_path: Path) -> None:
+def test_startup_message_shows_triggers_when_enabled() -> None:
     runtime = _build_healthy_runtime()
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=False,
         topics=TelegramTopicsSettings(),
-        voice_transcription=True,
-        files_enabled=True,
+        trigger_config={"enabled": True, "webhooks": [{}], "crons": []},
     )
-    assert "voice: `enabled`" in message
-    assert "files: `enabled`" in message
-    assert "resume lines: `hidden`" in message
+    assert "triggers:" in message
+    assert "1 webhooks" in message
 
 
 def test_startup_message_project_count(tmp_path: Path) -> None:
@@ -221,10 +197,7 @@ def test_startup_message_project_count(tmp_path: Path) -> None:
     )
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
     assert "projects: `proj-a, proj-b`" in message
@@ -349,9 +322,10 @@ def test_build_versions_line(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "opencode 1.1.11" in line
 
 
-def test_startup_message_includes_versions_line(
+def test_startup_message_excludes_versions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Versions moved to /config home page — no longer in startup."""
     runtime = _build_healthy_runtime()
     monkeypatch.setattr(
         telegram_backend,
@@ -360,14 +334,10 @@ def test_startup_message_includes_versions_line(
     )
     message = telegram_backend._build_startup_message(
         runtime,
-        startup_pwd=str(tmp_path),
         chat_id=123,
-        session_mode="stateless",
-        show_resume_line=True,
         topics=TelegramTopicsSettings(),
     )
-    assert "versions:" in message
-    assert "claude 1.0.0" in message
+    assert "versions:" not in message
 
 
 def test_telegram_files_settings_defaults() -> None:

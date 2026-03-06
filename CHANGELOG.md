@@ -1,5 +1,42 @@
 # changelog
 
+## v0.32.0 (2026-03-06)
+
+### changes
+
+- add Gemini CLI runner with `--approval-mode` passthrough for plan mode support [#991](https://github.com/littlebearapps/untether/issues/991)
+- add Amp CLI runner with mode selection and `--stream-json-input` support [#988](https://github.com/littlebearapps/untether/issues/988), [#989](https://github.com/littlebearapps/untether/issues/989)
+- add `/threads` command for Amp thread management [#993](https://github.com/littlebearapps/untether/issues/993)
+- track Amp subagent `parent_tool_use_id` in action detail [#992](https://github.com/littlebearapps/untether/issues/992)
+- redesign `/config` home page with grouped sections (Agent controls, Display, Routing), inline hints, and help links
+- add version information footer to `/config` home page
+- compact startup message — only show enabled features (topics, triggers), merge engine and default on one line
+
+### fixes
+
+- Gemini CLI `-p` flag compatibility (changed from boolean to string argument) [#75](https://github.com/littlebearapps/untether/issues/75)
+- Amp CLI `-x` flag requires prompt as direct argument [#76](https://github.com/littlebearapps/untether/issues/76)
+- Amp CLI uses `--mode` not `--model` for model override [#77](https://github.com/littlebearapps/untether/issues/77)
+- Amp `/threads` table parsing — `threads list`/`search` don't support `--json` [#78](https://github.com/littlebearapps/untether/issues/78)
+- standardise unrecognised-event debug logging across all engine runners
+- add structured logging for cost budget alerts and exceeded events
+- improve atomic JSON state write error handling and logging
+- add timeout and generic exception handlers to voice transcription
+- add structured logging for plugin load errors
+- improve config cleanup error logging with error type details
+
+### docs
+
+- update README engine compatibility table with Gemini CLI and Amp columns
+- add `[gemini]` and `[amp]` configuration sections to config reference
+- various doc formatting and link updates
+
+### tests
+
+- add comprehensive tests for redesigned `/config` command (+199 lines)
+- simplify startup message generation tests
+- add cross-engine test coverage for Gemini and Amp runners
+
 ## v0.31.0 (2026-03-05)
 
 ### changes
@@ -14,10 +51,6 @@
 - improve `/auth` info message wording [#70](https://github.com/littlebearapps/untether/issues/70)
 - put Cost & usage and Trigger on same row in `/config` [#71](https://github.com/littlebearapps/untether/issues/71)
 - 5 optimisations from 4-engine test sweep [#72](https://github.com/littlebearapps/untether/issues/72)
-- Gemini CLI `-p` flag compatibility with v0.32.0 (changed from boolean to string argument) [#75](https://github.com/littlebearapps/untether/issues/75)
-- AMP CLI `-x` flag requires prompt as direct argument [#76](https://github.com/littlebearapps/untether/issues/76)
-- AMP CLI uses `--mode` not `--model` for model override [#77](https://github.com/littlebearapps/untether/issues/77)
-- AMP `/threads` table parsing — `threads list`/`search` don't support `--json` [#78](https://github.com/littlebearapps/untether/issues/78)
 
 ### docs
 

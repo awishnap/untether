@@ -63,15 +63,15 @@ And target the project by prefixing your message:
 
 Untether runs the agent in `~/dev/happy-gadgets`, not your current directory.
 
-<!-- SCREENSHOT: Telegram showing /<project> command and response with ctx: footer -->
+<!-- SCREENSHOT: Telegram showing /<project> command and response with dir: footer -->
 
 The response includes a context footer:
 
 !!! untether "Untether"
-    ctx: happy-gadgets<br>
+    dir: happy-gadgets<br>
     codex resume abc123
 
-That `ctx:` line tells you which project is active. When you reply, Untether automatically uses the same project—you don't need to repeat `/happy-gadgets`.
+That `dir:` line tells you which project is active. When you reply, Untether automatically uses the same project—you don't need to repeat `/happy-gadgets`.
 
 ## 3. Set up worktrees
 
@@ -115,12 +115,12 @@ Untether:
 3. If the branch doesn't exist, it creates it from `worktree_base` (or the repo default) and adds the worktree
 4. Runs the agent in that worktree
 
-<!-- SCREENSHOT: Telegram showing @branch directive response with ctx: project @branch footer -->
+<!-- SCREENSHOT: Telegram showing @branch directive response with dir: project @branch footer -->
 
 The response shows both project and branch:
 
 !!! untether "Untether"
-    ctx: happy-gadgets @feat/new-login<br>
+    dir: happy-gadgets @feat/new-login<br>
     codex resume xyz789
 
 Replies stay on the same branch. Your main checkout is untouched.
@@ -133,15 +133,15 @@ Once you've set a context (via `/<project-alias> @branch` or by replying), it st
     /happy-gadgets @feat/new-login add tests
 
 !!! untether "Untether"
-    ctx: happy-gadgets @feat/new-login
+    dir: happy-gadgets @feat/new-login
 
 !!! user "reply to the bot's answer"
     also add integration tests
 
 !!! untether "Untether"
-    ctx: happy-gadgets @feat/new-login
+    dir: happy-gadgets @feat/new-login
 
-The `ctx:` line in each message carries the context forward.
+The `dir:` line in each message carries the context forward.
 
 ## 6. Set a default project
 
@@ -181,7 +181,7 @@ untether
     /happy-gadgets @feat/caching implement caching
 
 !!! untether "Untether"
-    ctx: happy-gadgets @feat/caching
+    dir: happy-gadgets @feat/caching
 
     !!! user "You"
         also add cache invalidation
@@ -218,7 +218,7 @@ Make sure the worktrees directory (default `.worktrees`) is writable. If you've 
 
 **Context not carrying forward**
 
-Make sure you're **replying** to a message with a `ctx:` line. If you send a new message (not a reply), context resets unless you have a `default_project`.
+Make sure you're **replying** to a message with a `dir:` line. If you send a new message (not a reply), context resets unless you have a `default_project`.
 
 **Worktree conflicts with existing branch**
 

@@ -318,6 +318,49 @@ here; plugin engines should document their own keys.
     model = "claude-sonnet"
     ```
 
+### `gemini`
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `model` | string | (unset) | Optional model override, passed as `--model`. |
+
+=== "untether config"
+
+    ```sh
+    untether config set gemini.model "gemini-2.5-pro"
+    ```
+
+=== "toml"
+
+    ```toml
+    [gemini]
+    model = "gemini-2.5-pro"
+    ```
+
+### `amp`
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `mode` | string | (unset) | Execution mode, passed as `--mode`. Values: `deep`, `free`, `rush`, `smart`. |
+| `model` | string | (unset) | Display label shown in the message footer. Overridden by `mode` if both are set. |
+| `dangerously_allow_all` | bool | `true` | Pass `--dangerously-allow-all` to skip permission prompts. |
+| `stream_json_input` | bool | `false` | Pass `--stream-json-input` for stdin-based prompt delivery. |
+
+=== "untether config"
+
+    ```sh
+    untether config set amp.mode "deep"
+    untether config set amp.dangerously_allow_all true
+    ```
+
+=== "toml"
+
+    ```toml
+    [amp]
+    mode = "deep"
+    dangerously_allow_all = true
+    ```
+
 ## Triggers
 
 Webhook and cron triggers that start agent runs from external events. See the

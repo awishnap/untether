@@ -432,6 +432,7 @@ def translate_codex_event(
 ) -> list[UntetherEvent]:
     match event:
         case codex_schema.ThreadStarted(thread_id=thread_id):
+            logger.debug("codex.session.extracted", session_id=thread_id)
             token = ResumeToken(engine=ENGINE, value=thread_id)
             return [factory.started(token, title=title, meta=meta)]
         case codex_schema.ItemStarted(item=item):
@@ -441,6 +442,10 @@ def translate_codex_event(
         case codex_schema.ItemCompleted(item=item):
             return _translate_item_event("completed", item, factory=factory)
         case _:
+            logger.debug(
+                "codex.event.unrecognised",
+                event_type=type(event).__name__,
+            )
             return []
 
 

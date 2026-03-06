@@ -219,7 +219,12 @@ class HttpBotClient:
                 retry_after: float | None = None
                 try:
                     response_payload = resp.json()
-                except Exception:  # noqa: BLE001
+                except Exception as parse_exc:  # noqa: BLE001
+                    logger.debug(
+                        "telegram.rate_limit.parse_failed",
+                        method=method,
+                        error=str(parse_exc),
+                    )
                     response_payload = None
                 if isinstance(response_payload, dict):
                     retry_after = retry_after_from_payload(response_payload)
@@ -344,7 +349,12 @@ class HttpBotClient:
                 retry_after: float | None = None
                 try:
                     response_payload = resp.json()
-                except Exception:  # noqa: BLE001
+                except Exception as parse_exc:  # noqa: BLE001
+                    logger.debug(
+                        "telegram.rate_limit.parse_failed",
+                        method="download_file",
+                        error=str(parse_exc),
+                    )
                     response_payload = None
                 if isinstance(response_payload, dict):
                     retry_after = retry_after_from_payload(response_payload)

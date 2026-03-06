@@ -337,6 +337,10 @@ def translate_pi_event(
             return out
 
         case _:
+            logger.debug(
+                "pi.event.unrecognised",
+                event_type=type(event).__name__,
+            )
             return out
 
 

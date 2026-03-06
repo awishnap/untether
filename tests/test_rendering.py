@@ -127,3 +127,12 @@ def test_split_markdown_body_closes_and_reopens_fence() -> None:
     assert len(chunks) > 1
     assert chunks[0].rstrip().endswith("```")
     assert chunks[1].startswith("```py\n")
+
+
+def test_render_markdown_linkifies_raw_urls() -> None:
+    """Raw URLs should become clickable text_link entities."""
+    text, entities = render_markdown("Check https://example.com for details")
+    assert "example.com" in text
+    link_entities = [e for e in entities if e.get("type") == "text_link"]
+    assert len(link_entities) == 1
+    assert link_entities[0]["url"] == "https://example.com"

@@ -289,6 +289,10 @@ def translate_amp_event(
         )
         return out
 
+    logger.debug(
+        "amp.event.unrecognised",
+        event_type=type(event).__name__,
+    )
     return out
 
 

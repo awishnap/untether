@@ -2047,3 +2047,202 @@ class TestCostUsageToasts:
 
     def test_toast_sub_usage_clear(self):
         assert ConfigCommand.early_answer_toast("cu:su_clr") == "Sub usage: cleared"
+
+
+# ---------------------------------------------------------------------------
+# Docs links on sub-pages
+# ---------------------------------------------------------------------------
+
+
+class TestDocsLinks:
+    """Each sub-page should include a docs link."""
+
+    _DOCS_BASE = "littlebearapps.com/tools/untether/how-to/"
+
+    @pytest.mark.anyio
+    async def test_planmode_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_verbose_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="vb",
+            text="config:vb",
+            config_path=state_path,
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_engine_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="ag",
+            text="config:ag",
+            config_path=state_path,
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_trigger_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="tr",
+            text="config:tr",
+            config_path=state_path,
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_model_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="md",
+            text="config:md",
+            config_path=state_path,
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_ask_mode_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="aq",
+            text="config:aq",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_diff_preview_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="dp",
+            text="config:dp",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_cost_usage_has_docs_link(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu",
+            text="config:cu",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        assert self._DOCS_BASE in _last_edit_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_home_has_docs_links(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        text = _last_send_msg(ctx).text
+        assert "Settings guide" in text
+        assert "Troubleshooting" in text
+        assert self._DOCS_BASE in text
+
+
+# ---------------------------------------------------------------------------
+# Home page grouped sections
+# ---------------------------------------------------------------------------
+
+
+class TestHomePageSections:
+    @pytest.mark.anyio
+    async def test_claude_home_has_agent_controls_section(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        text = _last_send_msg(ctx).text
+        assert "Agent controls" in text
+        assert "Claude Code" in text
+
+    @pytest.mark.anyio
+    async def test_non_claude_home_no_agent_controls(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="codex")
+        await cmd.handle(ctx)
+        text = _last_send_msg(ctx).text
+        assert "Agent controls" not in text
+
+    @pytest.mark.anyio
+    async def test_home_has_display_section(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        assert "Display" in _last_send_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_home_has_routing_section(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        assert "Routing" in _last_send_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_home_micro_hint_verbose_off(self, tmp_path):
+        """Verbose=off should show 'compact progress' hint."""
+        state_path = tmp_path / "prefs.json"
+        _VERBOSE_OVERRIDES[123] = "compact"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        assert "compact progress" in _last_send_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_home_micro_hint_trigger_all(self, tmp_path):
+        """Trigger=all should show 'respond to everything' hint."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        assert "respond to everything" in _last_send_msg(ctx).text
+
+    @pytest.mark.anyio
+    async def test_home_shows_versions_line(self, tmp_path, monkeypatch):
+        """Versions line should appear at the bottom of /config home page."""
+        from untether.telegram import backend as telegram_backend
+
+        monkeypatch.setattr(
+            telegram_backend, "_detect_cli_version", lambda cmd: "1.0.0"
+        )
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        text = _last_send_msg(ctx).text
+        assert "py " in text
+        assert "claude 1.0.0" in text

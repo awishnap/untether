@@ -52,7 +52,7 @@ Some engines support reasoning levels that control how much thinking the model d
 /reasoning set high
 ```
 
-Valid levels are `low`, `medium`, and `high` — availability depends on the engine and model.
+Valid levels are `low`, `medium`, and `high` — availability depends on the engine and model. Currently only Codex CLI supports reasoning levels; other engines (Claude, OpenCode, Pi, Gemini, Amp) ignore this setting.
 
 ## Per-engine reasoning
 

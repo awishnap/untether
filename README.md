@@ -112,33 +112,36 @@ systemctl --user restart untether  # from shell (systemd)
 | [Codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | Fast edits, shell commands, quick fixes |
 | [OpenCode](https://github.com/opencode-ai/opencode) | `npm i -g opencode-ai@latest` | 75+ providers via Models.dev, local models |
 | [Pi](https://github.com/mariozechner/pi-coding-agent) | `npm i -g @mariozechner/pi-coding-agent` | Multi-provider auth, conversational |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google Gemini models, streaming JSON _(coming soon)_ |
-| [Amp](https://ampcode.com) | `npm i -g @sourcegraph/amp` | Sourcegraph's AI coding agent _(coming soon)_ |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google Gemini models, approval mode |
+| [Amp](https://ampcode.com) | `npm i -g @sourcegraph/amp` | Sourcegraph's AI coding agent, mode selection |
 
 **Note:** Use your existing Claude or ChatGPT subscription — no extra API keys needed (unless you want API billing).
 
 ### Engine compatibility
 
-| Feature | Claude Code | Codex CLI | OpenCode | Pi |
-|---------|:-----------:|:---------:|:--------:|:--:|
-| **Progress streaming** | ✅ | ✅ | ✅ | ✅ |
-| **Session resume** | ✅ | ✅ | ✅ | ✅ |
-| **Model override** | ✅ | ✅ | ✅ | ✅ |
-| **Voice input** | ✅ | ✅ | ✅ | ✅ |
-| **Verbose progress** | ✅ | ✅ | ✅ | ✅ |
-| **Error hints** | ✅ | ✅ | ✅ | ✅ |
-| **Preamble injection** | ✅ | ✅ | ✅ | ✅ |
-| **Cost tracking** | ✅ | ✅ | ✅ | ✅ |
-| **Interactive permissions** | ✅ | — | — | — |
-| **Plan mode** | ✅ | — | — | — |
-| **Ask mode (option buttons)** | ✅ | — | — | — |
-| **Diff preview** | ✅ | — | — | — |
-| **Auto-approve safe tools** | ✅ | — | — | — |
-| **Progressive cooldown** | ✅ | — | — | — |
-| **Subscription usage** | ✅ | — | — | — |
-| **Reasoning levels** | — | ✅ | — | — |
-| **Device re-auth (`/auth`)** | — | ✅ | — | — |
-| **Context compaction** | — | — | — | ✅ |
+| Feature | Claude Code | Codex CLI | OpenCode | Pi | Gemini CLI | Amp |
+|---------|:-----------:|:---------:|:--------:|:--:|:----------:|:---:|
+| **Progress streaming** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Session resume** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Model override** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ |
+| **Voice input** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Verbose progress** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Error hints** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Preamble injection** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Cost tracking** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Interactive permissions** | ✅ | — | — | — | — | — |
+| **Plan mode** | ✅ | — | — | — | ✅² | — |
+| **Ask mode (option buttons)** | ✅ | — | — | — | — | — |
+| **Diff preview** | ✅ | — | — | — | — | — |
+| **Auto-approve safe tools** | ✅ | — | — | — | — | — |
+| **Progressive cooldown** | ✅ | — | — | — | — | — |
+| **Subscription usage** | ✅ | — | — | — | — | — |
+| **Reasoning levels** | — | ✅ | — | — | — | — |
+| **Device re-auth (`/auth`)** | — | ✅ | — | — | — | — |
+| **Context compaction** | — | — | — | ✅ | — | — |
+
+¹ Amp model override maps to `--mode` (deep/free/rush/smart).
+² Gemini plan mode uses `--approval-mode` passthrough.
 
 ---
 
@@ -204,7 +207,7 @@ See the [full configuration reference](https://github.com/littlebearapps/untethe
 
 - **Python 3.12+** — `uv python install 3.14`
 - **uv** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- At least one agent CLI on PATH: `codex`, `claude`, `opencode`, or `pi`
+- At least one agent CLI on PATH: `claude`, `codex`, `opencode`, `pi`, `gemini`, or `amp`
 
 ---
 
@@ -216,6 +219,8 @@ Detailed setup and usage for each engine:
 - [Codex guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/codex/exec-json-cheatsheet.md) — profiles, extra args, exec mode
 - [OpenCode guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/opencode/runner.md) — model selection, 75+ providers, local models
 - [Pi guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/pi/runner.md) — multi-provider auth, model and provider selection
+- [Gemini CLI guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/gemini/runner.md) — Google Gemini models, approval mode passthrough
+- [Amp guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/amp/runner.md) — mode selection, thread management
 - [Configuration reference](https://github.com/littlebearapps/untether/blob/master/docs/reference/config.md) — full walkthrough of `untether.toml`
 - [Troubleshooting guide](https://github.com/littlebearapps/untether/blob/master/docs/how-to/troubleshooting.md) — common issues and solutions
 
