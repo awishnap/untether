@@ -1495,7 +1495,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             "runner.start",
             engine=self.engine,
             resume=resume.value if resume else None,
-            prompt=prompt,
+            prompt=prompt[:100] + "…" if len(prompt) > 100 else prompt,
             prompt_len=len(prompt),
         )
 

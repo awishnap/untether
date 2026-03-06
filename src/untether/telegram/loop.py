@@ -2043,6 +2043,12 @@ async def run_main_loop(
                 forward_coalescer.schedule(pending)
 
             allowed_user_ids = set(cfg.allowed_user_ids)
+            if not allowed_user_ids:
+                logger.warning(
+                    "security.no_allowed_users",
+                    hint="allowed_user_ids is empty — any user in the chat can run commands. "
+                    "Set [transports.telegram] allowed_user_ids to restrict access.",
+                )
 
             async def route_update(update: TelegramIncomingUpdate) -> None:
                 if allowed_user_ids:

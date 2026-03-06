@@ -1,5 +1,13 @@
 # changelog
 
+## v0.33.2 (2026-03-06)
+
+### fixes
+
+- warn at startup when `allowed_user_ids` is empty — any chat member can run commands without filtering [#84](https://github.com/littlebearapps/untether/issues/84)
+- sanitise subprocess stderr before exposing to Telegram — redact absolute file paths and URLs [#85](https://github.com/littlebearapps/untether/issues/85)
+- truncate prompts to 100 chars in INFO logs to reduce sensitive data exposure [#86](https://github.com/littlebearapps/untether/issues/86)
+
 ## v0.33.1 (2026-03-06)
 
 ### fixes

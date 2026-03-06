@@ -103,14 +103,25 @@ def _rc_label(rc: int) -> str:
     return f"rc={rc}"
 
 
+_ABS_PATH_RE = re.compile(r"(/[\w./-]{3,}/[\w.-]+)")
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+
+
+def _sanitise_stderr(text: str) -> str:
+    """Redact absolute paths and URLs from stderr before exposing to users."""
+    text = _ABS_PATH_RE.sub("[path]", text)
+    text = _URL_RE.sub("[url]", text)
+    return text
+
+
 def _stderr_excerpt(lines: list[str] | None, max_chars: int = 300) -> str | None:
-    """First ~max_chars of captured stderr, or None."""
+    """First ~max_chars of captured stderr, sanitised for user display."""
     if not lines:
         return None
     text = "\n".join(lines)
     if len(text) > max_chars:
         text = text[:max_chars] + "…"
-    return text
+    return _sanitise_stderr(text)
 
 
 def _session_label(
@@ -663,7 +674,7 @@ class JsonlSubprocessRunner(BaseRunner):
             "runner.start",
             engine=self.engine,
             resume=resume.value if resume else None,
-            prompt=prompt,
+            prompt=prompt[:100] + "…" if len(prompt) > 100 else prompt,
             prompt_len=len(prompt),
         )
 
