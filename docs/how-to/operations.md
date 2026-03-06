@@ -1,6 +1,6 @@
 # Operations and monitoring
 
-Untether runs as a long-lived process, typically managed by systemd. This guide covers health checks, graceful restarts, diagnostics, and day-to-day operations — all controllable from [Telegram](https://telegram.org) without SSH.
+Untether runs as a long-lived process, typically in a terminal or managed by a process supervisor (systemd on Linux, etc.). This guide covers health checks, graceful restarts, diagnostics, and day-to-day operations — all controllable from [Telegram](https://telegram.org) without SSH.
 
 ## Health check
 
@@ -39,7 +39,7 @@ Sending SIGTERM to the Untether process triggers the same graceful drain as `/re
 2. Active runs are allowed to complete
 3. After a 120-second drain timeout, remaining runs are cancelled and the process exits
 
-This means `systemctl --user stop untether` also drains gracefully, as systemd sends SIGTERM first.
+This means `systemctl --user stop untether` (Linux) also drains gracefully, as systemd sends SIGTERM first. Pressing Ctrl+C in a terminal sends SIGINT, which triggers the same graceful drain.
 
 !!! note "Drain timeout"
     The default drain timeout is 120 seconds. If active runs don't complete within this window, they are cancelled and a timeout notification is sent to Telegram.
@@ -99,26 +99,35 @@ Enable config watching so Untether picks up changes without a restart:
 
 When enabled, Untether watches the config file for changes and reloads most settings automatically. Transport settings (bot token, chat ID) are excluded — those require a full restart.
 
-## Service management
+## Process management
 
-For systemd-managed installations, common operations:
+=== "Telegram (all platforms)"
 
-```bash
-# Restart the service
-systemctl --user restart untether
+    Send `/restart` in Telegram for a graceful restart with drain visibility.
+    Use `/ping` to check the bot is running.
 
-# Follow live logs
-journalctl --user -u untether -f
+=== "Foreground (macOS / Windows)"
 
-# Check service status
-systemctl --user status untether
+    If running Untether in a terminal:
 
-# View recent logs (last 100 lines)
-journalctl --user -u untether -n 100
-```
+    ```sh
+    # Stop with Ctrl+C, then restart:
+    untether
+    ```
+
+    View output directly in the terminal. Use `--debug` for verbose logging to `debug.log`.
+
+=== "Linux (systemd)"
+
+    ```bash
+    systemctl --user restart untether
+    journalctl --user -u untether -f       # live logs
+    systemctl --user status untether       # check status
+    journalctl --user -u untether -n 100   # recent logs
+    ```
 
 !!! warning "Restart vs /restart"
-    `systemctl --user restart untether` sends SIGTERM, which triggers a graceful drain. However, `/restart` in Telegram gives you a confirmation message and visibility into the drain process. Prefer `/restart` when you have Telegram access.
+    `systemctl --user restart untether` sends SIGTERM, which triggers a graceful drain. However, `/restart` in Telegram gives you a confirmation message and visibility into the drain process. Prefer `/restart` when you have Telegram access — it works on all platforms.
 
 ## Related
 

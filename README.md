@@ -64,24 +64,6 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 
 ---
 
-## 🔄 Upgrading
-
-```sh
-uv tool upgrade untether        # if installed with uv
-# or
-pipx upgrade untether            # if installed with pipx
-```
-
-Then restart to apply:
-
-```sh
-/restart                         # from Telegram (preferred — drains active runs first)
-# or
-systemctl --user restart untether  # from shell (systemd)
-```
-
----
-
 ## 🎯 Features
 
 - 📡 **Progress streaming** — watch your agent work in real time; see tool calls, file changes, and elapsed time as they happen
@@ -200,6 +182,30 @@ max_cost_per_day = 10.00
 See the [full configuration reference](https://github.com/littlebearapps/untether/blob/master/docs/reference/config.md) for all options.
 
 **Warning:** Never commit your `untether.toml` — it contains your bot token. The default location (`~/.untether/`) keeps it outside your repos.
+
+---
+
+## 🔄 Upgrading
+
+```sh
+uv tool upgrade untether        # if installed with uv
+# or
+pipx upgrade untether            # if installed with pipx
+```
+
+Then restart to apply:
+
+```sh
+/restart                         # from Telegram (preferred — works on all platforms)
+```
+
+Or from your shell — stop the running process (Ctrl+C) and re-run:
+
+```sh
+untether
+```
+
+On Linux with systemd: `systemctl --user restart untether`
 
 ---
 

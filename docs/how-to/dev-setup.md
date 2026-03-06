@@ -21,6 +21,9 @@ untether --help
 
 ## Two-instance model
 
+!!! note "Linux-specific"
+    The two-instance systemd model below assumes Linux. On macOS or Windows, just run `untether` in a terminal — stop with Ctrl+C and re-run to pick up changes.
+
 Untether runs two separate instances on the same machine:
 
 | | Production | Dev |
@@ -45,13 +48,13 @@ vim src/untether/telegram/commands/my_feature.py
 # 2. Run checks
 uv run pytest && uv run ruff check src/
 
-# 3. Restart the dev service to pick up changes
+# 3. Restart to pick up changes
+# Linux (systemd):
 systemctl --user restart untether-dev
-
-# 4. Check dev service logs
 journalctl --user -u untether-dev -f
+# macOS/Windows: Ctrl+C the running process, then re-run untether
 
-# 5. Test via @your_dev_bot in Telegram
+# 4. Test via @your_dev_bot in Telegram
 ```
 
 <!-- SCREENSHOT: journalctl output showing untether-dev starting cleanly -->
@@ -110,13 +113,13 @@ uv run pytest -k "test_approve"                   # run tests matching pattern
 Only after code is merged and released to PyPI:
 
 ```bash
-# Option 1: graceful upgrade (recommended)
-# Send /restart in Telegram first, wait for drain, then:
+# Upgrade the package
 uv tool upgrade untether       # or: pipx upgrade untether
-systemctl --user restart untether
 
-# Option 2: direct upgrade
-uv tool upgrade untether && systemctl --user restart untether
+# Restart to apply:
+# Preferred (all platforms): send /restart in Telegram, wait for drain
+# Linux (systemd): systemctl --user restart untether
+# macOS/Windows: Ctrl+C the running process, then re-run untether
 ```
 
 !!! note "Graceful restart"

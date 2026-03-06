@@ -17,18 +17,13 @@ untether doctor     # preflight check: token, chat, topics, files, voice, engine
 
 **Symptoms:** You send a message but the bot doesn't reply at all.
 
-1. Check that Untether is running in your terminal (or via systemd)
+1. Check that Untether is running:
+    - **Terminal**: Look at the terminal where you ran `untether` — is it still running?
+    - **Linux (systemd)**: `systemctl --user status untether`
 2. Verify your bot token: `untether doctor` will flag an invalid token
 3. Check `allowed_user_ids` — if set, only listed users can interact. An empty list means everyone is allowed.
 4. In a group chat, check trigger mode: if set to `mentions`, you must @mention the bot
 5. Make sure you're messaging the correct bot (not a different one)
-
-If using systemd:
-
-```sh
-systemctl --user status untether
-journalctl --user -u untether -f    # live logs
-```
 
 ## Engine CLI not found
 
@@ -235,20 +230,23 @@ It validates:
 
 <!-- SCREENSHOT: untether doctor output with all checks passing -->
 
-## Checking service logs
+## Checking logs
 
-If running Untether as a systemd service:
+=== "Terminal (all platforms)"
 
-```sh
-# Live logs
-journalctl --user -u untether -f
+    Untether logs to the terminal by default. For detailed logs:
 
-# Last 100 lines
-journalctl --user -u untether -n 100
+    ```sh
+    untether --debug    # writes debug.log in current directory
+    ```
 
-# Logs since last boot
-journalctl --user -u untether -b
-```
+=== "Linux (systemd)"
+
+    ```sh
+    journalctl --user -u untether -f       # live logs
+    journalctl --user -u untether -n 100   # last 100 lines
+    journalctl --user -u untether -b       # since last boot
+    ```
 
 Look for `handle.worker_failed`, `handle.runner_failed`, or `config.read.toml_error` entries.
 
