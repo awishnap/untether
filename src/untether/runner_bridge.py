@@ -235,13 +235,18 @@ def _format_run_cost(usage: dict[str, Any] | None) -> str | None:
     if not usage:
         return None
     cost = usage.get("total_cost_usd")
-    if cost is None:
+    token_usage = usage.get("usage")
+    has_tokens = isinstance(token_usage, dict) and (
+        token_usage.get("input_tokens", 0) or token_usage.get("output_tokens", 0)
+    )
+    if cost is None and not has_tokens:
         return None
     parts: list[str] = []
-    if cost >= 0.01:
-        parts.append(f"${cost:.2f}")
-    else:
-        parts.append(f"${cost:.4f}")
+    if cost is not None:
+        if cost >= 0.01:
+            parts.append(f"${cost:.2f}")
+        else:
+            parts.append(f"${cost:.4f}")
     turns = usage.get("num_turns")
     if turns:
         parts.append(f"{turns} turns")
@@ -254,8 +259,7 @@ def _format_run_cost(usage: dict[str, Any] | None) -> str | None:
             parts.append(f"{mins}m {remaining}s API")
         else:
             parts.append(f"{secs:.1f}s API")
-    token_usage = usage.get("usage")
-    if isinstance(token_usage, dict):
+    if has_tokens:
         input_tokens = token_usage.get("input_tokens", 0)
         output_tokens = token_usage.get("output_tokens", 0)
         if input_tokens or output_tokens:
@@ -270,7 +274,7 @@ def _format_run_cost(usage: dict[str, Any] | None) -> str | None:
             parts.append(
                 f"{_fmt_tokens(input_tokens)} in / {_fmt_tokens(output_tokens)} out"
             )
-    return " · ".join(parts)
+    return " · ".join(parts) or None
 
 
 def _check_cost_budget(usage: dict[str, Any] | None) -> str | None:

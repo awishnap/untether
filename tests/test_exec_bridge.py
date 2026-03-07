@@ -617,8 +617,16 @@ class TestFormatRunCost:
     def test_none_usage(self):
         assert _format_run_cost(None) is None
 
-    def test_no_cost(self):
+    def test_no_cost_no_tokens(self):
         assert _format_run_cost({"num_turns": 5}) is None
+
+    def test_tokens_only_no_cost(self):
+        result = _format_run_cost(
+            {"usage": {"input_tokens": 72500, "output_tokens": 120}}
+        )
+        assert result is not None
+        assert result == "72.5k in / 120 out"
+        assert "$" not in result
 
     def test_cost_only(self):
         result = _format_run_cost({"total_cost_usd": 0.15})

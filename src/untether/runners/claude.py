@@ -1410,16 +1410,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             found_session.value if found_session else (resume.value if resume else None)
         )
         if session_id:
-            _ACTIVE_RUNNERS.pop(session_id, None)
-            _SESSION_STDIN.pop(session_id, None)
-            clear_discuss_cooldown(session_id)
-            _DISCUSS_APPROVED.discard(session_id)
-            _OUTLINE_PENDING.discard(session_id)
-            # Clean up stale request mappings for this session
-            stale = [k for k, v in _REQUEST_TO_SESSION.items() if v == session_id]
-            for k in stale:
-                del _REQUEST_TO_SESSION[k]
-            logger.debug("claude_runner.unregistered", session_id=session_id)
+            _cleanup_session_registries(session_id)
 
         parts = [f"Claude Code failed ({_rc_label(rc)})."]
         session = _session_label(found_session, resume)
@@ -1450,16 +1441,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             found_session.value if found_session else (resume.value if resume else None)
         )
         if session_id:
-            _ACTIVE_RUNNERS.pop(session_id, None)
-            _SESSION_STDIN.pop(session_id, None)
-            clear_discuss_cooldown(session_id)
-            _DISCUSS_APPROVED.discard(session_id)
-            _OUTLINE_PENDING.discard(session_id)
-            # Clean up stale request mappings for this session
-            stale = [k for k, v in _REQUEST_TO_SESSION.items() if v == session_id]
-            for k in stale:
-                del _REQUEST_TO_SESSION[k]
-            logger.debug("claude_runner.unregistered", session_id=session_id)
+            _cleanup_session_registries(session_id)
 
         if not found_session:
             parts = ["Claude Code finished but no session_id was captured"]
@@ -1678,6 +1660,18 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                     yield evt
 
         finally:
+            # Clean up global registries on ANY exit (cancel, error, normal).
+            # process_error_events/stream_end_events handle normal paths but
+            # cancellation skips both, leaving stale outline_guard/cooldown state.
+            _sid = resume.value if resume else None
+            if _sid is None:
+                try:
+                    if stream.found_session is not None:
+                        _sid = stream.found_session.value
+                except (NameError, AttributeError):
+                    pass
+            if _sid:
+                _cleanup_session_registries(_sid)
             # Cleanup - close the local stdin if it wasn't already closed
             if this_proc_stdin is not None:
                 with contextlib.suppress(Exception):
@@ -1835,6 +1829,23 @@ def check_discuss_cooldown(session_id: str) -> str | None:
 def clear_discuss_cooldown(session_id: str) -> None:
     """Clear the discuss cooldown for a session (e.g. on approve/deny)."""
     _DISCUSS_COOLDOWN.pop(session_id, None)
+
+
+def _cleanup_session_registries(session_id: str) -> None:
+    """Clean up all global registries for a session.
+
+    Called from run_impl finally (covers cancel), process_error_events,
+    and stream_end_events. All operations are idempotent.
+    """
+    _ACTIVE_RUNNERS.pop(session_id, None)
+    _SESSION_STDIN.pop(session_id, None)
+    clear_discuss_cooldown(session_id)
+    _DISCUSS_APPROVED.discard(session_id)
+    _OUTLINE_PENDING.discard(session_id)
+    stale = [k for k, v in _REQUEST_TO_SESSION.items() if v == session_id]
+    for k in stale:
+        del _REQUEST_TO_SESSION[k]
+    logger.debug("claude_runner.session_cleanup", session_id=session_id)
 
 
 def get_pending_ask_request() -> tuple[str, str] | None:

@@ -29,6 +29,9 @@ Trigger: all
 [  Engine   ] [ Trigger  ]
 ```
 
+!!! note "Gemini CLI"
+    When the engine is Gemini CLI, the home page shows **Approval mode** (read-only / full access) instead of Plan mode, Ask mode, and Diff preview.
+
 ## Navigate sub-pages
 
 Tap any button to open that setting's page. Each sub-page shows:
@@ -50,7 +53,8 @@ When you tap a setting button:
 
 Some settings are engine-specific and only appear when relevant:
 
-- **Plan mode** — available for Claude Code and Gemini CLI. Hidden for other engines; the sub-page shows a "not available" message with a Back button.
+- **Plan mode** — available for Claude Code. Hidden for other engines; the sub-page shows a "not available" message with a Back button.
+- **Approval mode** — only available for Gemini CLI. Toggle between "read-only" (default, write tools blocked) and "full access" (all tools approved). This replaces the Plan mode button on the home page when the engine is Gemini.
 - **Ask mode** — only available for Claude Code. When enabled, Claude Code can ask interactive questions with option buttons instead of guessing. Hidden for other engines.
 - **Reasoning** — only available for engines that support reasoning levels (Claude Code and Codex). Hidden for OpenCode, Pi, and others.
 - **Model** — always visible. Shows the current model override and lets you clear it. To set a model, use `/model set <name>`.
@@ -62,6 +66,7 @@ When you switch engines via the Engine sub-page, the home page automatically sho
 | Setting | Options | Persisted |
 |---------|---------|-----------|
 | Plan mode | off, on, auto | Yes (chat prefs) |
+| Approval mode | read-only, full access | Yes (chat prefs) |
 | Ask mode | off, on | Yes (chat prefs) |
 | Verbose | off, on | No (in-memory, resets on restart) |
 | Diff preview | off, on | Yes (chat prefs) |
@@ -70,6 +75,8 @@ When you switch engines via the Engine sub-page, the home page automatically sho
 | Reasoning | minimal, low, medium, high, xhigh | Yes (chat prefs) |
 | Cost & usage | API cost on/off, subscription usage on/off | Yes (chat prefs) |
 | Trigger | all, mentions | Yes (chat prefs) |
+
+Approval mode appears instead of Plan mode when the engine is Gemini CLI.
 
 ### Cost & Usage page
 

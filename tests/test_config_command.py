@@ -126,7 +126,7 @@ class TestToasts:
         assert ConfigCommand.early_answer_toast("pm:auto") == "Plan mode: auto"
 
     def test_toast_planmode_clear(self):
-        assert ConfigCommand.early_answer_toast("pm:clr") == "Plan mode: cleared"
+        assert ConfigCommand.early_answer_toast("pm:clr") == "Permission mode: cleared"
 
     def test_toast_verbose_on(self):
         assert ConfigCommand.early_answer_toast("vb:on") == "Verbose: on"
@@ -355,8 +355,8 @@ class TestPlanMode:
         assert "config:home" in _buttons_data(_last_edit_msg(ctx))
 
     @pytest.mark.anyio
-    async def test_planmode_guard_non_claude(self, tmp_path):
-        """Plan mode page shows guard message when engine is not claude."""
+    async def test_planmode_guard_unsupported_engine(self, tmp_path):
+        """Permission mode page shows guard for unsupported engines."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(
@@ -367,12 +367,12 @@ class TestPlanMode:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Only available for Claude Code" in msg.text
+        assert "Only available for Claude Code and Gemini CLI" in msg.text
         assert "config:home" in _buttons_data(msg)
 
     @pytest.mark.anyio
-    async def test_planmode_guard_non_claude_with_override(self, tmp_path):
-        """Plan mode guard respects per-chat engine override."""
+    async def test_planmode_guard_unsupported_with_override(self, tmp_path):
+        """Permission mode guard respects per-chat engine override."""
         from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
 
         state_path = tmp_path / "prefs.json"
@@ -388,7 +388,153 @@ class TestPlanMode:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Only available for Claude Code" in msg.text
+        assert "Only available for Claude Code and Gemini CLI" in msg.text
+
+
+# ---------------------------------------------------------------------------
+# Gemini approval mode (via plan mode page)
+# ---------------------------------------------------------------------------
+
+
+class TestGeminiApprovalMode:
+    @pytest.mark.anyio
+    async def test_approval_mode_page_renders(self, tmp_path):
+        """Navigating to pm page with gemini engine shows approval mode."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Approval mode" in msg.text
+        assert "config:pm:fa" in _buttons_data(msg)
+        assert "config:pm:ro" in _buttons_data(msg)
+
+    @pytest.mark.anyio
+    async def test_set_full_access_stores_yolo(self, tmp_path):
+        """Setting full access stores 'yolo' as permission_mode."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:fa",
+            text="config:pm:fa",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Settings" in msg.text  # Returns to home
+        assert "full access" in msg.text.lower()
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "gemini")
+        assert override is not None
+        assert override.permission_mode == "yolo"
+
+    @pytest.mark.anyio
+    async def test_set_readonly_clears_permission(self, tmp_path):
+        """Setting read-only clears the permission_mode override."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "gemini", EngineOverrides(permission_mode="yolo")
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:ro",
+            text="config:pm:ro",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Settings" in msg.text
+        assert "read-only" in msg.text.lower()
+
+    @pytest.mark.anyio
+    async def test_clear_returns_home(self, tmp_path):
+        """Clearing approval mode returns to home page."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:fa",
+            text="config:pm:fa",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        ctx = _make_ctx(
+            args_text="pm:clr",
+            text="config:pm:clr",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Settings" in msg.text
+
+    @pytest.mark.anyio
+    async def test_home_shows_approval_mode_for_gemini(self, tmp_path):
+        """Home page shows 'Approval mode' label and button for gemini."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="gemini")
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "Approval mode" in msg.text
+        assert "config:pm" in _buttons_data(msg)
+        # Should NOT show Claude-specific features
+        assert "Plan mode" not in msg.text
+        assert "Ask mode" not in msg.text
+
+    @pytest.mark.anyio
+    async def test_home_shows_full_access_label(self, tmp_path):
+        """Home page shows 'full access' when yolo is set."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "gemini", EngineOverrides(permission_mode="yolo")
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="gemini")
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "full access" in msg.text.lower()
+
+    @pytest.mark.anyio
+    async def test_approval_mode_has_back_button(self, tmp_path):
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        assert "config:home" in _buttons_data(_last_edit_msg(ctx))
+
+
+class TestGeminiApprovalModeToasts:
+    def test_toast_full_access(self):
+        assert ConfigCommand.early_answer_toast("pm:fa") == "Approval mode: full access"
+
+    def test_toast_read_only(self):
+        assert ConfigCommand.early_answer_toast("pm:ro") == "Approval mode: read-only"
 
 
 # ---------------------------------------------------------------------------

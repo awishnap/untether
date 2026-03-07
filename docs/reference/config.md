@@ -337,6 +337,9 @@ here; plugin engines should document their own keys.
     model = "gemini-2.5-pro"
     ```
 
+!!! note "Approval mode"
+    Gemini CLI's approval mode (read-only vs full access) is toggled per chat via `/config` → **Approval mode**, not the config file. See [inline settings](../how-to/inline-settings.md).
+
 ### `amp`
 
 | Key | Type | Default | Notes |

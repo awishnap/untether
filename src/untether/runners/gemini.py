@@ -117,16 +117,20 @@ def _build_usage(stats: dict[str, Any] | None) -> dict[str, Any] | None:
     if stats is None:
         return None
     usage: dict[str, Any] = {}
-    total_cost = stats.get("total_cost_usd")
-    if isinstance(total_cost, (int, float)):
-        usage["total_cost_usd"] = total_cost
     input_tokens = stats.get("input_tokens")
     output_tokens = stats.get("output_tokens")
     if isinstance(input_tokens, int) or isinstance(output_tokens, int):
-        usage["usage"] = {
+        token_usage: dict[str, Any] = {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
         }
+        cached = stats.get("cached")
+        if isinstance(cached, int):
+            token_usage["cache_read_tokens"] = cached
+        usage["usage"] = token_usage
+    duration_ms = stats.get("duration_ms")
+    if isinstance(duration_ms, (int, float)):
+        usage["duration_ms"] = duration_ms
     return usage or None
 
 

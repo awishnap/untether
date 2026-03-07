@@ -82,6 +82,8 @@ _HOME_HINTS: dict[str, dict[str, str]] = {
         "on": "approve actions",
         "off": "run freely",
         "auto": "auto-approve actions",
+        "full access": "all tools approved",
+        "read-only": "write tools blocked",
     },
     "aq": {
         "on": "interactive questions",
@@ -114,6 +116,7 @@ async def _page_home(ctx: CommandContext) -> None:
         API_COST_SUPPORTED_ENGINES,
         ASK_QUESTIONS_SUPPORTED_ENGINES,
         DIFF_PREVIEW_SUPPORTED_ENGINES,
+        PERMISSION_MODE_SUPPORTED_ENGINES,
         SUBSCRIPTION_USAGE_SUPPORTED_ENGINES,
         supports_reasoning,
     )
@@ -134,22 +137,24 @@ async def _page_home(ctx: CommandContext) -> None:
 
     if config_path is not None:
         prefs = ChatPrefsStore(resolve_prefs_path(config_path))
-        override = await prefs.get_engine_override(chat_id, "claude")
-        pm = override.permission_mode if override else None
-        if pm == "plan":
-            pm_label = "on"
-        elif pm == "auto":
-            pm_label = "auto"
-        elif pm is not None:
-            pm_label = "off"
-        else:
-            pm_label = "default"
+        engine_override = await prefs.get_engine_override(chat_id, current_engine)
+        pm = engine_override.permission_mode if engine_override else None
+        if current_engine == "claude":
+            if pm == "plan":
+                pm_label = "on"
+            elif pm == "auto":
+                pm_label = "auto"
+            elif pm is not None:
+                pm_label = "off"
+            else:
+                pm_label = "default"
+        elif current_engine == "gemini":
+            pm_label = "full access" if pm == "yolo" else "read-only"
 
         trig = await prefs.get_trigger_mode(chat_id)
         trigger_label = trig or "all"
 
         # Model override for current engine
-        engine_override = await prefs.get_engine_override(chat_id, current_engine)
         if engine_override and engine_override.model:
             model_label = engine_override.model
 
@@ -185,7 +190,7 @@ async def _page_home(ctx: CommandContext) -> None:
     else:
         verbose_label = "default"
 
-    show_plan_mode = current_engine == "claude"
+    show_plan_mode = current_engine in PERMISSION_MODE_SUPPORTED_ENGINES
     show_reasoning = supports_reasoning(current_engine)
     show_ask_questions = current_engine in ASK_QUESTIONS_SUPPORTED_ENGINES
     show_diff_preview = current_engine in DIFF_PREVIEW_SUPPORTED_ENGINES
@@ -199,14 +204,22 @@ async def _page_home(ctx: CommandContext) -> None:
         "",
     ]
 
-    # --- Agent controls (Claude Code-only features) ---
+    # --- Agent controls ---
     if show_plan_mode:
-        lines.append("<b>Agent controls</b> <i>(Claude Code)</i>")
-        lines.append(f"Plan mode: <b>{pm_label}</b>{_home_hint('pm', pm_label)}")
-        if show_ask_questions:
-            lines.append(f"Ask mode: <b>{aq_label}</b>{_home_hint('aq', aq_label)}")
-        if show_diff_preview:
-            lines.append(f"Diff preview: <b>{dp_label}</b>{_home_hint('dp', dp_label)}")
+        if current_engine == "claude":
+            lines.append("<b>Agent controls</b> <i>(Claude Code)</i>")
+            lines.append(f"Plan mode: <b>{pm_label}</b>{_home_hint('pm', pm_label)}")
+            if show_ask_questions:
+                lines.append(f"Ask mode: <b>{aq_label}</b>{_home_hint('aq', aq_label)}")
+            if show_diff_preview:
+                lines.append(
+                    f"Diff preview: <b>{dp_label}</b>{_home_hint('dp', dp_label)}"
+                )
+        elif current_engine == "gemini":
+            lines.append("<b>Agent controls</b> <i>(Gemini CLI)</i>")
+            lines.append(
+                f"Approval mode: <b>{pm_label}</b>{_home_hint('pm', pm_label)}"
+            )
         lines.append("")
 
     # --- Display ---
@@ -240,7 +253,7 @@ async def _page_home(ctx: CommandContext) -> None:
 
     buttons: list[list[dict[str, str]]] = []
 
-    if show_plan_mode:
+    if current_engine == "claude":
         # Claude Code layout
         buttons.append(
             [
@@ -265,8 +278,26 @@ async def _page_home(ctx: CommandContext) -> None:
         buttons.append(row4)
         if show_reasoning:
             buttons.append([{"text": "Reasoning", "callback_data": "config:rs"}])
+    elif current_engine == "gemini":
+        # Gemini layout
+        row1 = [{"text": "Approval mode", "callback_data": "config:pm"}]
+        if show_cost_usage:
+            row1.append({"text": "Cost & usage", "callback_data": "config:cu"})
+        buttons.append(row1)
+        buttons.append(
+            [
+                {"text": "Verbose", "callback_data": "config:vb"},
+                {"text": "Model", "callback_data": "config:md"},
+            ]
+        )
+        buttons.append(
+            [
+                {"text": "Engine", "callback_data": "config:ag"},
+                {"text": "Trigger", "callback_data": "config:tr"},
+            ]
+        )
     else:
-        # Non-Claude Code engines
+        # Other engines
         if show_cost_usage:
             buttons.append([{"text": "Cost & usage", "callback_data": "config:cu"}])
         buttons.append(
@@ -293,16 +324,21 @@ async def _page_home(ctx: CommandContext) -> None:
 
 _PM_MODES: dict[str, str] = {"on": "plan", "auto": "auto", "off": "acceptEdits"}
 
+_GEMINI_AM_MODES: dict[str, str] = {"fa": "yolo"}
+
 
 async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None:
     from ..chat_prefs import ChatPrefsStore, resolve_prefs_path
-    from ..engine_overrides import EngineOverrides
+    from ..engine_overrides import (
+        EngineOverrides,
+        PERMISSION_MODE_SUPPORTED_ENGINES,
+    )
 
     config_path = ctx.config_path
     if config_path is None:
         await _respond(
             ctx,
-            "<b>⚙️ Plan mode</b>\n\nUnavailable (no config path).",
+            "<b>⚙️ Permission mode</b>\n\nUnavailable (no config path).",
             [[{"text": "← Back", "callback_data": "config:home"}]],
         )
         return
@@ -310,19 +346,22 @@ async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None
     prefs = ChatPrefsStore(resolve_prefs_path(config_path))
     chat_id = ctx.message.channel_id
 
-    # Plan mode is Claude Code-only — guard against non-Claude Code engines
     current_engine, _ = await _resolve_effective_engine(ctx)
-    if current_engine != "claude":
+    if current_engine not in PERMISSION_MODE_SUPPORTED_ENGINES:
         await _respond(
             ctx,
-            "<b>⚙️ Plan mode</b>\n\nOnly available for Claude Code.",
+            (
+                "<b>⚙️ Permission mode</b>\n\n"
+                "Only available for Claude Code and Gemini CLI."
+            ),
             [[{"text": "← Back", "callback_data": "config:home"}]],
         )
         return
 
-    engine = "claude"
+    engine = current_engine
 
-    if action in _PM_MODES:
+    # --- Claude plan mode actions ---
+    if engine == "claude" and action in _PM_MODES:
         current = await prefs.get_engine_override(chat_id, engine)
         updated = EngineOverrides(
             model=current.model if current else None,
@@ -339,7 +378,27 @@ async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None
         logger.info("config.planmode.set", chat_id=chat_id, mode=action)
         await _page_home(ctx)
         return
-    elif action == "clr":
+
+    # --- Gemini approval mode actions ---
+    if engine == "gemini" and action in _GEMINI_AM_MODES:
+        current = await prefs.get_engine_override(chat_id, engine)
+        updated = EngineOverrides(
+            model=current.model if current else None,
+            reasoning=current.reasoning if current else None,
+            permission_mode=_GEMINI_AM_MODES[action],
+            ask_questions=current.ask_questions if current else None,
+            diff_preview=current.diff_preview if current else None,
+            show_api_cost=current.show_api_cost if current else None,
+            show_subscription_usage=current.show_subscription_usage
+            if current
+            else None,
+        )
+        await prefs.set_engine_override(chat_id, engine, updated)
+        logger.info("config.approval_mode.set", chat_id=chat_id, mode=action)
+        await _page_home(ctx)
+        return
+
+    if engine == "gemini" and action == "ro":
         current = await prefs.get_engine_override(chat_id, engine)
         updated = EngineOverrides(
             model=current.model if current else None,
@@ -353,57 +412,116 @@ async def _page_planmode(ctx: CommandContext, action: str | None = None) -> None
             else None,
         )
         await prefs.set_engine_override(chat_id, engine, updated)
-        logger.info("config.planmode.cleared", chat_id=chat_id)
+        logger.info("config.approval_mode.set", chat_id=chat_id, mode="ro")
         await _page_home(ctx)
         return
 
+    # --- Clear (all engines) ---
+    if action == "clr":
+        current = await prefs.get_engine_override(chat_id, engine)
+        updated = EngineOverrides(
+            model=current.model if current else None,
+            reasoning=current.reasoning if current else None,
+            permission_mode=None,
+            ask_questions=current.ask_questions if current else None,
+            diff_preview=current.diff_preview if current else None,
+            show_api_cost=current.show_api_cost if current else None,
+            show_subscription_usage=current.show_subscription_usage
+            if current
+            else None,
+        )
+        await prefs.set_engine_override(chat_id, engine, updated)
+        logger.info("config.permission_mode.cleared", chat_id=chat_id, engine=engine)
+        await _page_home(ctx)
+        return
+
+    # --- Display page ---
     override = await prefs.get_engine_override(chat_id, engine)
     pm = override.permission_mode if override else None
-    if pm == "plan":
-        current_label = "on"
-    elif pm == "auto":
-        current_label = "auto"
-    elif pm is not None:
-        current_label = "off"
-    else:
-        current_label = "default"
 
-    lines = [
-        "<b>⚙️ Plan mode</b>",
-        "",
-        "Review and approve each action before it runs.",
-        "",
-        "• <b>off</b> — run freely, no approval needed",
-        "• <b>on</b> — ask before every action (safest)",
-        "• <b>auto</b> — approve actions, ask before finalising plans",
-        "",
-        "Works with: Claude Code",
-        "",
-        f"Current: <b>{current_label}</b>",
-        "",
-        f'📖 <a href="{_DOCS_BASE}plan-mode/">Learn more</a>',
-    ]
+    if engine == "claude":
+        if pm == "plan":
+            current_label = "on"
+        elif pm == "auto":
+            current_label = "auto"
+        elif pm is not None:
+            current_label = "off"
+        else:
+            current_label = "default"
 
-    buttons = [
-        [
-            {
-                "text": _check("Off", active=current_label == "off"),
-                "callback_data": "config:pm:off",
-            },
-            {
-                "text": _check("On", active=current_label == "on"),
-                "callback_data": "config:pm:on",
-            },
-            {
-                "text": _check("Auto", active=current_label == "auto"),
-                "callback_data": "config:pm:auto",
-            },
-        ],
-        [
-            {"text": "Clear override", "callback_data": "config:pm:clr"},
-            {"text": "← Back", "callback_data": "config:home"},
-        ],
-    ]
+        lines = [
+            "<b>⚙️ Plan mode</b>",
+            "",
+            "Review and approve each action before it runs.",
+            "",
+            "• <b>off</b> — run freely, no approval needed",
+            "• <b>on</b> — ask before every action (safest)",
+            "• <b>auto</b> — approve actions, ask before finalising plans",
+            "",
+            "Works with: Claude Code",
+            "",
+            f"Current: <b>{current_label}</b>",
+            "",
+            f'📖 <a href="{_DOCS_BASE}plan-mode/">Learn more</a>',
+        ]
+
+        buttons = [
+            [
+                {
+                    "text": _check("Off", active=current_label == "off"),
+                    "callback_data": "config:pm:off",
+                },
+                {
+                    "text": _check("On", active=current_label == "on"),
+                    "callback_data": "config:pm:on",
+                },
+                {
+                    "text": _check("Auto", active=current_label == "auto"),
+                    "callback_data": "config:pm:auto",
+                },
+            ],
+            [
+                {"text": "Clear override", "callback_data": "config:pm:clr"},
+                {"text": "← Back", "callback_data": "config:home"},
+            ],
+        ]
+
+    elif engine == "gemini":
+        current_label = "full access" if pm == "yolo" else "read-only"
+
+        lines = [
+            "<b>⚙️ Approval mode</b>",
+            "",
+            "Control which tools Gemini can use in non-interactive mode.",
+            "Write tools are blocked by default — enable full access",
+            "to allow file creation and editing.",
+            "",
+            "• <b>read-only</b> — write tools blocked (default)",
+            "• <b>full access</b> — all tools approved",
+            "",
+            "Works with: Gemini CLI",
+            "",
+            f"Current: <b>{current_label}</b>",
+            "",
+            f'📖 <a href="{_DOCS_BASE}inline-settings/">Learn more</a>',
+        ]
+
+        buttons = [
+            [
+                {
+                    "text": _check("Read-only", active=pm != "yolo"),
+                    "callback_data": "config:pm:ro",
+                },
+                {
+                    "text": _check("Full access", active=pm == "yolo"),
+                    "callback_data": "config:pm:fa",
+                },
+            ],
+            [
+                {"text": "Clear override", "callback_data": "config:pm:clr"},
+                {"text": "← Back", "callback_data": "config:home"},
+            ],
+        ]
 
     await _respond(ctx, "\n".join(lines), buttons)
 
@@ -1276,7 +1394,9 @@ class ConfigCommand:
                 "on": "Plan mode: on",
                 "off": "Plan mode: off",
                 "auto": "Plan mode: auto",
-                "clr": "Plan mode: cleared",
+                "clr": "Permission mode: cleared",
+                "fa": "Approval mode: full access",
+                "ro": "Approval mode: read-only",
             },
             "vb": {
                 "on": "Verbose: on",

@@ -18,12 +18,15 @@ from untether.runners.claude import (
     ClaudeStreamState,
     ENGINE,
     _ACTIVE_RUNNERS,
+    _DISCUSS_APPROVED,
     _DISCUSS_COOLDOWN,
     _HANDLED_REQUESTS,
+    _OUTLINE_PENDING,
     _REQUEST_TO_INPUT,
     _REQUEST_TO_SESSION,
     _REQUEST_TO_TOOL_NAME,
     _SESSION_STDIN,
+    _cleanup_session_registries,
     check_discuss_cooldown,
     clear_discuss_cooldown,
     send_claude_control_response,
@@ -1415,3 +1418,77 @@ async def test_deny_non_exit_plan_mode_uses_generic_message() -> None:
     inner = payload["response"]["response"]
     assert inner["behavior"] == "deny"
     assert inner["message"] == _DENY_MESSAGE
+
+
+# ---------------------------------------------------------------------------
+# Cancel cleanup (stale outline_guard / cooldown after cancel + resume)
+# ---------------------------------------------------------------------------
+
+
+class TestCancelCleanup:
+    """Verify _cleanup_session_registries clears all state, preventing
+    stale outline_guard after cancel + resume (#93)."""
+
+    def test_cleanup_clears_all_state(self):
+        sid = "sess-cleanup-all"
+        runner = ClaudeRunner(claude_cmd="claude")
+
+        # Populate every registry
+        _ACTIVE_RUNNERS[sid] = (runner, 0.0)
+        _SESSION_STDIN[sid] = AsyncMock()
+        _REQUEST_TO_SESSION["req-a"] = sid
+        _REQUEST_TO_SESSION["req-b"] = sid
+        set_discuss_cooldown(sid)  # sets _DISCUSS_COOLDOWN + _OUTLINE_PENDING
+        _DISCUSS_APPROVED.add(sid)
+
+        _cleanup_session_registries(sid)
+
+        assert sid not in _ACTIVE_RUNNERS
+        assert sid not in _SESSION_STDIN
+        assert "req-a" not in _REQUEST_TO_SESSION
+        assert "req-b" not in _REQUEST_TO_SESSION
+        assert sid not in _DISCUSS_COOLDOWN
+        assert sid not in _DISCUSS_APPROVED
+        assert sid not in _OUTLINE_PENDING
+
+    def test_cleanup_idempotent(self):
+        sid = "sess-cleanup-idem"
+        # Call twice on empty state — no error
+        _cleanup_session_registries(sid)
+        _cleanup_session_registries(sid)
+
+    def test_outline_pending_cleared_on_cancel_path(self):
+        """Simulate the production bug: Pause & Outline clicked, then cancelled."""
+        sid = "sess-cancel-outline"
+        runner = ClaudeRunner(claude_cmd="claude")
+
+        _ACTIVE_RUNNERS[sid] = (runner, 0.0)
+        _SESSION_STDIN[sid] = AsyncMock()
+        set_discuss_cooldown(sid)
+
+        assert sid in _OUTLINE_PENDING
+        assert check_discuss_cooldown(sid) is not None
+
+        # Simulates the finally block running on cancel
+        _cleanup_session_registries(sid)
+
+        assert sid not in _OUTLINE_PENDING
+        assert check_discuss_cooldown(sid) is None
+
+    def test_resumed_session_no_stale_outline_guard(self):
+        """After cleanup, a resumed session should not see outline_guard=True."""
+        sid = "sess-resume-guard"
+        runner = ClaudeRunner(claude_cmd="claude")
+
+        # Set up stale state (as if Pause & Outline was clicked before cancel)
+        _ACTIVE_RUNNERS[sid] = (runner, 0.0)
+        _SESSION_STDIN[sid] = AsyncMock()
+        set_discuss_cooldown(sid)
+        _OUTLINE_PENDING.add(sid)
+
+        # Cancel triggers cleanup
+        _cleanup_session_registries(sid)
+
+        # Verify the outline_guard check returns False
+        outline_guard = sid in _OUTLINE_PENDING and 0 < 200
+        assert not outline_guard

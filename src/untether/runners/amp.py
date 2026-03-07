@@ -114,7 +114,12 @@ def _accumulate_usage(state: AmpStreamState, message: dict[str, Any] | None) -> 
     usage = message.get("usage")
     if not isinstance(usage, dict):
         return
-    for key in ("input_tokens", "output_tokens"):
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    ):
         val = usage.get(key)
         if isinstance(val, int):
             state.accumulated_usage[key] = state.accumulated_usage.get(key, 0) + val
@@ -124,12 +129,16 @@ def _build_usage(state: AmpStreamState) -> dict[str, Any] | None:
     """Build a usage dict from accumulated token data."""
     if not state.accumulated_usage:
         return None
-    return {
-        "usage": {
-            "input_tokens": state.accumulated_usage.get("input_tokens", 0),
-            "output_tokens": state.accumulated_usage.get("output_tokens", 0),
-        }
+    token_usage: dict[str, Any] = {
+        "input_tokens": state.accumulated_usage.get("input_tokens", 0),
+        "output_tokens": state.accumulated_usage.get("output_tokens", 0),
     }
+    cache_create = state.accumulated_usage.get("cache_creation_input_tokens", 0)
+    cache_read = state.accumulated_usage.get("cache_read_input_tokens", 0)
+    if cache_create or cache_read:
+        token_usage["cache_write_tokens"] = cache_create
+        token_usage["cache_read_tokens"] = cache_read
+    return {"usage": token_usage}
 
 
 def translate_amp_event(

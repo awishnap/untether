@@ -94,7 +94,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 | [Codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | Fast edits, shell commands, quick fixes |
 | [OpenCode](https://github.com/opencode-ai/opencode) | `npm i -g opencode-ai@latest` | 75+ providers via Models.dev, local models |
 | [Pi](https://github.com/mariozechner/pi-coding-agent) | `npm i -g @mariozechner/pi-coding-agent` | Multi-provider auth, conversational |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google Gemini models, approval mode |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google Gemini models, configurable approval mode |
 | [Amp](https://ampcode.com) | `npm i -g @sourcegraph/amp` | Sourcegraph's AI coding agent, mode selection |
 
 **Note:** Use your existing Claude or ChatGPT subscription — no extra API keys needed (unless you want API billing).
@@ -123,7 +123,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 | **Context compaction** | — | — | — | ✅ | — | — |
 
 ¹ Amp model override maps to `--mode` (deep/free/rush/smart).
-² Passthrough to Gemini CLI's `--approval-mode`; not Untether's interactive approve/deny workflow.
+² Toggle via `/config` between read-only (default) and full access (`--approval-mode=yolo`); not Untether's interactive approve/deny workflow.
 ³ Token usage counts only — no USD cost reporting.
 
 ---

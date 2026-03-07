@@ -1,13 +1,30 @@
 # changelog
 
+## v0.34.0 (2026-03-07)
+
+### fixes
+
+- ExitPlanMode stuck after cancel + resume: stale outline_guard not cleaned up [#93](https://github.com/littlebearapps/untether/issues/93)
+  - extract `_cleanup_session_registries()` helper, call from `run_impl` finally block
+
+### changes
+
+- show token-only cost footer for Gemini and AMP — `_format_run_cost()` no longer requires `total_cost_usd`; renders `💰 26.0k in / 71 out` when only token data is available [#94](https://github.com/littlebearapps/untether/issues/94)
+  - Gemini `_build_usage()`: extract `cached` → `cache_read_tokens` and `duration_ms` from StreamStats
+  - AMP `_accumulate_usage()`: accumulate `cache_creation_input_tokens` and `cache_read_input_tokens`
+- add Gemini CLI approval mode toggle in `/config` — "read-only" (default, write tools blocked) or "full access" (`--approval-mode=yolo`); tied into existing plan mode infrastructure via shared `permission_mode` field [#90](https://github.com/littlebearapps/untether/issues/90)
+  - home page shows "Approval mode" label and button when engine is Gemini
+  - sub-page with Read-only/Full access toggle
+  - `PERMISSION_MODE_SUPPORTED_ENGINES` constant for engine-aware gating
+
 ## v0.33.5 (2026-03-07)
 
 ### fixes
 
 - downgrade `control_response.failed` ClosedResourceError from error to warning — race condition when Telegram callback arrives after session stdin closes; `write_control_response()` now returns `bool` and `send_claude_control_response()` propagates it [#61](https://github.com/littlebearapps/untether/issues/61)
   - also downgrade `auto_approve_failed` and `auto_deny_failed` for consistency
-- add subprocess watchdog — detects orphaned child processes (e.g. MCP servers) holding stdout pipes open after parent exits; kills process group after grace period
-- add stall monitor — warns when no progress events arrive for 5 minutes; clears on recovery
+- add subprocess watchdog — detects orphaned child processes (e.g. MCP servers) holding stdout pipes open after parent exits; kills process group after grace period [#91](https://github.com/littlebearapps/untether/issues/91)
+- add stall monitor — warns when no progress events arrive for 5 minutes; clears on recovery [#92](https://github.com/littlebearapps/untether/issues/92)
 - handle `ClosedResourceError` in `iter_bytes_lines()` on abrupt pipe close
 
 ## v0.33.4 (2026-03-06)

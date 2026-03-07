@@ -5,7 +5,7 @@ This tutorial walks you through Untether's interactive permission system — app
 **What you'll learn:** How to control Claude Code's actions in real time with Telegram buttons, how to request and review a plan before execution, and how to answer agent questions from anywhere.
 
 !!! note "Claude Code only"
-    Interactive approval is a Claude Code feature. Other engines (Codex, OpenCode, Pi) run non-interactively — they don't prompt for approval.
+    Interactive approval buttons (Approve / Deny / Pause & Outline Plan) are a Claude Code feature. Other engines run non-interactively. Gemini CLI has a separate [approval mode toggle](../how-to/inline-settings.md) in `/config` (read-only vs full access) but no per-tool buttons.
 
 ## 1. Understand permission modes
 
