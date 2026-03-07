@@ -69,6 +69,21 @@ def _load_footer_settings():
         return FooterSettings()
 
 
+def _load_watchdog_settings():
+    """Load watchdog settings from config, returning None if unavailable."""
+    try:
+        from .settings import load_settings_if_exists
+
+        result = load_settings_if_exists()
+        if result is None:
+            return None
+        settings, _ = result
+        return settings.watchdog
+    except Exception:  # noqa: BLE001
+        logger.debug("watchdog_settings.load_failed", exc_info=True)
+        return None
+
+
 _DEFAULT_PREAMBLE = (
     "[Untether] You are running via Untether, a Telegram bridge for coding agents. "
     "The user is interacting through Telegram on a mobile device.\n\n"
@@ -523,8 +538,14 @@ class ProgressEdits:
         self._has_rendered: bool = False
         self._last_event_at: float = clock()
         self._stall_warned: bool = False
-        self._stall_notified: bool = False
+        self._stall_warn_count: int = 0
+        self._last_stall_warn_at: float = 0.0
+        self._peak_idle: float = 0.0
+        self._prev_diag: Any = None
         self._stall_check_interval: float = 60.0
+        self._stall_repeat_seconds: float = 180.0
+        self.pid: int | None = None
+        self.stream: Any = None  # JsonlStreamState, set from run_runner_with_cancel
         self.event_seq = 0
         self.rendered_seq = 0
         self.signal_send, self.signal_recv = anyio.create_memory_object_stream(1)
@@ -544,38 +565,94 @@ class ProgressEdits:
             stall_scope.cancel()
 
     async def _stall_monitor(self) -> None:
-        """Periodically check for event stalls and log/notify."""
+        """Periodically check for event stalls, log diagnostics, and notify."""
+        from .utils.proc_diag import collect_proc_diag, format_diag, is_cpu_active
+
         while True:
             await anyio.sleep(self._stall_check_interval)
             elapsed = self.clock() - self._last_event_at
-            if elapsed >= self._STALL_THRESHOLD_SECONDS and not self._stall_warned:
-                self._stall_warned = True
-                logger.warning(
-                    "progress_edits.stall_detected",
+            self._peak_idle = max(self._peak_idle, elapsed)
+
+            if elapsed < self._STALL_THRESHOLD_SECONDS:
+                continue
+            now = self.clock()
+            if (
+                self._stall_warned
+                and (now - self._last_stall_warn_at) < self._stall_repeat_seconds
+            ):
+                continue
+
+            self._stall_warned = True
+            self._stall_warn_count += 1
+            self._last_stall_warn_at = now
+
+            diag = collect_proc_diag(self.pid) if self.pid else None
+            last_action = self._last_action_summary()
+
+            recent = list(self.stream.recent_events) if self.stream else []
+            stderr_hint = (
+                self.stream.stderr_capture[-3:]
+                if self.stream and self.stream.stderr_capture
+                else None
+            )
+
+            logger.warning(
+                "progress_edits.stall_detected",
+                channel_id=self.channel_id,
+                seconds_since_last_event=round(elapsed, 1),
+                last_event_seq=self.event_seq,
+                stall_warn_count=self._stall_warn_count,
+                pid=self.pid,
+                last_action=last_action,
+                last_event_type=(self.stream.last_event_type if self.stream else None),
+                process_alive=diag.alive if diag else None,
+                process_state=diag.state if diag else None,
+                tcp_established=diag.tcp_established if diag else None,
+                tcp_total=diag.tcp_total if diag else None,
+                rss_kb=diag.rss_kb if diag else None,
+                fd_count=diag.fd_count if diag else None,
+                cpu_active=(
+                    is_cpu_active(self._prev_diag, diag)
+                    if self._prev_diag and diag
+                    else None
+                ),
+                recent_events=[(round(t, 1), lbl) for t, lbl in recent[-5:]],
+                stderr_hint=stderr_hint,
+            )
+            self._prev_diag = diag
+
+            # Telegram notification
+            parts = [f"⏳ No progress for {int(elapsed // 60)} min"]
+            if self._stall_warn_count > 1:
+                parts[0] += f" (warned {self._stall_warn_count}x)"
+            parts.append("— session may be stuck.")
+            if last_action:
+                parts.append(f"Last: {last_action}")
+            if diag:
+                parts.append(f"PID {diag.pid}: {format_diag(diag)}")
+            parts.append("/cancel to stop.")
+            text = "\n".join(parts)
+            try:
+                await self.transport.send(
                     channel_id=self.channel_id,
-                    seconds_since_last_event=round(elapsed, 1),
-                    last_event_seq=self.event_seq,
+                    message=RenderedMessage(text=text),
+                    options=SendOptions(
+                        thread_id=self.thread_id,
+                    ),
                 )
-                if not self._stall_notified:
-                    self._stall_notified = True
-                    mins = int(elapsed // 60)
-                    text = (
-                        f"⏳ No progress for {mins} min — "
-                        "session may be stuck. /cancel to stop."
-                    )
-                    try:
-                        await self.transport.send(
-                            channel_id=self.channel_id,
-                            message=RenderedMessage(text=text),
-                            options=SendOptions(
-                                thread_id=self.thread_id,
-                            ),
-                        )
-                    except Exception:  # noqa: BLE001
-                        logger.debug(
-                            "progress_edits.stall_notify_failed",
-                            exc_info=True,
-                        )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "progress_edits.stall_notify_failed",
+                    exc_info=True,
+                )
+
+    def _last_action_summary(self) -> str | None:
+        """Return a short description of the most recent action."""
+        for action_state in reversed(list(self.tracker._actions.values())):
+            a = action_state.action
+            status = "running" if not action_state.completed else "done"
+            return f"{a.kind}:{a.title} ({status})"
+        return None
 
     async def _run_loop(self, bg_tg: anyio.abc.TaskGroup) -> None:
         while True:
@@ -694,9 +771,11 @@ class ProgressEdits:
                 "progress_edits.stall_recovered",
                 channel_id=self.channel_id,
                 stall_seconds=round(elapsed_stall, 1),
+                stall_warn_count=self._stall_warn_count,
             )
             self._stall_warned = False
-            self._stall_notified = False
+            self._stall_warn_count = 0
+            self._prev_diag = None
         self._last_event_at = now
         self.event_seq += 1
         try:
@@ -790,6 +869,7 @@ async def run_runner_with_cancel(
     channel_id: ChannelId = 0,
 ) -> RunOutcome:
     outcome = RunOutcome()
+    start_time = time.monotonic()
     try:
         async with anyio.create_task_group() as tg:
 
@@ -800,6 +880,14 @@ async def run_runner_with_cancel(
                         if isinstance(evt, StartedEvent):
                             outcome.resume = evt.resume
                             bind_run_context(resume=evt.resume.value)
+                            # Thread PID and stream to ProgressEdits
+                            if evt.meta:
+                                pid = evt.meta.get("pid")
+                                if isinstance(pid, int):
+                                    edits.pid = pid
+                            _cs = getattr(runner, "current_stream", None)
+                            if _cs is not None:
+                                edits.stream = _cs
                             if running_task is not None and running_task.resume is None:
                                 running_task.resume = evt.resume
                                 try:
@@ -838,6 +926,21 @@ async def run_runner_with_cancel(
         ]
         if non_cancelled:
             raise non_cancelled[0] from eg
+
+    # Session completion summary
+    duration = time.monotonic() - start_time
+    logger.info(
+        "session.summary",
+        session_id=outcome.resume.value if outcome.resume else None,
+        engine=runner.engine,
+        duration_seconds=round(duration, 1),
+        event_count=edits.stream.event_count if edits.stream else 0,
+        stall_warnings=edits._stall_warn_count,
+        peak_idle_seconds=round(edits._peak_idle, 1),
+        last_event_type=edits.stream.last_event_type if edits.stream else None,
+        cancelled=outcome.cancelled,
+        ok=outcome.completed.ok if outcome.completed else None,
+    )
 
     return outcome
 
@@ -954,6 +1057,15 @@ async def handle_message(
         thread_id=incoming.thread_id,
         min_render_interval=cfg.min_render_interval,
     )
+
+    # Apply watchdog settings to runner and edits
+    watchdog = _load_watchdog_settings()
+    if watchdog is not None:
+        edits._stall_repeat_seconds = watchdog.stall_repeat_seconds
+        if hasattr(runner, "_LIVENESS_TIMEOUT_SECONDS"):
+            runner._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
+        if hasattr(runner, "_stall_auto_kill"):
+            runner._stall_auto_kill = watchdog.stall_auto_kill
 
     running_task: RunningTask | None = None
     if running_tasks is not None and progress_ref is not None:

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import signal
 import subprocess
+import time
+from collections import deque
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, cast
 from weakref import WeakValueDictionary
 
@@ -192,9 +195,21 @@ class JsonlStreamState:
     did_emit_completed: bool = False
     ignored_after_completed: bool = False
     jsonl_seq: int = 0
+    # Activity tracking for stall diagnostics
+    last_stdout_at: float = 0.0
+    last_event_type: str | None = None
+    last_event_tool: str | None = None
+    event_count: int = 0
+    recent_events: deque[tuple[float, str]] = field(
+        default_factory=lambda: deque(maxlen=10)
+    )
+    stderr_capture: list[str] = field(default_factory=list)
 
 
 class JsonlSubprocessRunner(BaseRunner):
+    # Exposed for diagnostics — set during run_impl, cleared on exit
+    current_stream: JsonlStreamState | None = None
+
     def get_logger(self) -> Any:
         return getattr(self, "logger", get_logger(__name__))
 
@@ -600,6 +615,10 @@ class JsonlSubprocessRunner(BaseRunner):
         line = raw_line.strip()
         if not line:
             return []
+        # Track raw I/O activity
+        now = time.monotonic()
+        stream.last_stdout_at = now
+        stream.event_count += 1
         stream.jsonl_seq += 1
         seq = stream.jsonl_seq
         events = self._decode_jsonl_events(
@@ -612,9 +631,37 @@ class JsonlSubprocessRunner(BaseRunner):
             logger=logger,
             pid=pid,
         )
+        # Peek at raw JSON for event timeline (engine-agnostic)
+        try:
+            raw_dict = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            raw_dict = None
+        if isinstance(raw_dict, dict):
+            etype = str(raw_dict.get("type", "unknown"))
+            etool = None
+            # Cover common engine conventions for tool name
+            for key in ("tool_name", "tool", "name"):
+                val = raw_dict.get(key)
+                if isinstance(val, str) and val:
+                    etool = val
+                    break
+            # Also check nested item.type for Codex-style events
+            item = raw_dict.get("item")
+            if etool is None and isinstance(item, dict):
+                itype = item.get("type")
+                if isinstance(itype, str) and itype:
+                    etool = itype
+            stream.last_event_type = etype
+            stream.last_event_tool = etool
+            label = f"tool:{etool}" if etool else etype
+            stream.recent_events.append((now, label))
         output: list[UntetherEvent] = []
         for evt in events:
             if isinstance(evt, StartedEvent):
+                # Inject subprocess PID into meta for diagnostics
+                meta = dict(evt.meta) if evt.meta else {}
+                meta["pid"] = pid
+                evt = replace(evt, meta=meta)
                 stream.found_session, emit = self._process_started_event(
                     evt,
                     expected_session=stream.expected_session,
@@ -663,6 +710,10 @@ class JsonlSubprocessRunner(BaseRunner):
 
     _WATCHDOG_POLL_SECONDS: float = 0.5
 
+    _LIVENESS_TIMEOUT_SECONDS: float = 600.0
+
+    _stall_auto_kill: bool = False
+
     async def _subprocess_watchdog(
         self,
         proc: Any,
@@ -678,8 +729,16 @@ class JsonlSubprocessRunner(BaseRunner):
         process death (``proc.wait()`` blocks until pipes drain, so we use
         ``os.kill(pid, 0)``), then after a grace period kills the process group
         to terminate orphan children and unblock the readers.
+
+        Also detects liveness stalls: process alive but no stdout for
+        ``_LIVENESS_TIMEOUT_SECONDS``.
         """
         import os as _os
+
+        from .utils.proc_diag import collect_proc_diag, is_cpu_active
+
+        liveness_warned = False
+        prev_diag = None
 
         # Poll until the process is dead or the reader finishes.
         while not reader_done.is_set():
@@ -687,6 +746,49 @@ class JsonlSubprocessRunner(BaseRunner):
                 _os.kill(pid, 0)
             except (ProcessLookupError, PermissionError):
                 break  # process exited
+
+            # Liveness stall detection
+            if (
+                not liveness_warned
+                and stream.last_stdout_at > 0
+                and not stream.did_emit_completed
+            ):
+                idle = time.monotonic() - stream.last_stdout_at
+                if idle >= self._LIVENESS_TIMEOUT_SECONDS:
+                    liveness_warned = True
+                    diag = collect_proc_diag(pid)
+                    cpu_active = is_cpu_active(prev_diag, diag)
+                    recent = list(stream.recent_events)[-5:]
+                    logger.warning(
+                        "subprocess.liveness_stall",
+                        pid=pid,
+                        idle_seconds=round(idle, 1),
+                        event_count=stream.event_count,
+                        last_event_type=stream.last_event_type,
+                        tcp_established=diag.tcp_established if diag else None,
+                        rss_kb=diag.rss_kb if diag else None,
+                        cpu_active=cpu_active,
+                        recent_events=[(round(t, 1), lbl) for t, lbl in recent],
+                    )
+                    # Auto-kill: config enabled + zero TCP + CPU NOT active
+                    if (
+                        self._stall_auto_kill
+                        and diag is not None
+                        and diag.tcp_established == 0
+                        and diag.alive
+                        and cpu_active is not True
+                    ):
+                        logger.warning(
+                            "subprocess.liveness_kill",
+                            pid=pid,
+                            reason="zero_tcp_zero_cpu",
+                        )
+                        with contextlib.suppress(
+                            ProcessLookupError, PermissionError, OSError
+                        ):
+                            _os.killpg(pid, signal.SIGKILL)
+                    prev_diag = diag
+
             await anyio.sleep(self._WATCHDOG_POLL_SECONDS)
         if stream.did_emit_completed or reader_done.is_set():
             return
@@ -755,7 +857,7 @@ class JsonlSubprocessRunner(BaseRunner):
             await self._send_payload(proc, payload, logger=logger, resume=resume)
 
             stream = JsonlStreamState(expected_session=resume)
-            stderr_lines: list[str] = []
+            self.current_stream = stream
             reader_done = anyio.Event()
 
             async with anyio.create_task_group() as tg:
@@ -764,7 +866,7 @@ class JsonlSubprocessRunner(BaseRunner):
                     proc.stderr,
                     logger,
                     tag,
-                    stderr_lines,
+                    stream.stderr_capture,
                 )
                 tg.start_soon(
                     self._subprocess_watchdog,
@@ -796,7 +898,7 @@ class JsonlSubprocessRunner(BaseRunner):
                     resume=resume,
                     found_session=found_session,
                     state=state,
-                    stderr_lines=stderr_lines or None,
+                    stderr_lines=stream.stderr_capture or None,
                 )
                 for evt in events:
                     if isinstance(evt, CompletedEvent):

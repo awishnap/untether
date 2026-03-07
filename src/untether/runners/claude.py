@@ -1582,7 +1582,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                     await proc.stdin.aclose()
 
                 stream = JsonlStreamState(expected_session=resume)
-                stderr_lines: list[str] = []
+                self.current_stream = stream
                 reader_done = anyio.Event()
 
                 async with anyio.create_task_group() as tg:
@@ -1591,7 +1591,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                         proc.stderr,
                         run_logger,
                         tag,
-                        stderr_lines,
+                        stream.stderr_capture,
                     )
                     tg.start_soon(
                         self._subprocess_watchdog,
@@ -1631,7 +1631,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                         resume=resume,
                         found_session=found_session,
                         state=state,
-                        stderr_lines=stderr_lines or None,
+                        stderr_lines=stream.stderr_capture or None,
                     )
                     for evt in events:
                         if isinstance(evt, CompletedEvent):

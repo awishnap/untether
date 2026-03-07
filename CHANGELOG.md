@@ -1,5 +1,22 @@
 # changelog
 
+## v0.34.1 (2026-03-07)
+
+### fixes
+
+- session stall diagnostics: add `/proc` process diagnostics (CPU, RSS, TCP, FDs, children), progressive stall warnings, liveness watchdog, event timeline tracking, and session completion summary [#97](https://github.com/littlebearapps/untether/issues/97)
+  - new `utils/proc_diag.py` module: `collect_proc_diag()`, `format_diag()`, `is_cpu_active()`
+  - `JsonlStreamState` tracks `last_stdout_at`, `event_count`, `last_event_type`, `recent_events` ring buffer, `stderr_capture`
+  - PID auto-injected into `StartedEvent.meta` via base class (all engines)
+  - progressive `_stall_monitor`: repeating warnings every 3 min with fresh `/proc` snapshots and Telegram notifications
+  - liveness watchdog: detects alive-but-silent subprocesses after 10 min with diagnostics; optional auto-kill (off by default, triple safety gate)
+  - `session.summary` structured log on every session completion
+  - `[watchdog]` config section: `liveness_timeout`, `stall_auto_kill`, `stall_repeat_seconds`
+- stream threading broken: `_ResumeLineProxy` hides `current_stream` from `ProgressEdits`, causing `event_count=0` and `last_event_type=None` for all engines [#98](https://github.com/littlebearapps/untether/issues/98)
+  - add `current_stream` property to `_ResumeLineProxy` and `_PreludeRunner`
+  - set `self.current_stream = stream` in Claude's overridden `run_impl`
+  - use `stream.stderr_capture` instead of separate `stderr_lines` in Claude's `run_impl`
+
 ## v0.34.0 (2026-03-07)
 
 ### fixes

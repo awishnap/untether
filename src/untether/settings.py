@@ -143,6 +143,14 @@ class PreambleSettings(BaseModel):
     text: str | None = None
 
 
+class WatchdogSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    liveness_timeout: float = Field(default=600.0, ge=60, le=3600)
+    stall_auto_kill: bool = False
+    stall_repeat_seconds: float = Field(default=180.0, ge=30, le=600)
+
+
 class ProgressSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -173,6 +181,7 @@ class UntetherSettings(BaseSettings):
     footer: FooterSettings = Field(default_factory=FooterSettings)
     preamble: PreambleSettings = Field(default_factory=PreambleSettings)
     progress: ProgressSettings = Field(default_factory=ProgressSettings)
+    watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
 
     @model_validator(mode="before")
     @classmethod

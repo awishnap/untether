@@ -583,3 +583,67 @@ async def test_watchdog_force_closes_orphaned_pipes(tmp_path, monkeypatch) -> No
     # Should have completed (watchdog force-closed the orphaned pipe)
     assert any(isinstance(e, StartedEvent) for e in events)
     assert any(isinstance(e, CompletedEvent) for e in events)
+
+
+@pytest.mark.anyio
+async def test_jsonl_stream_state_tracks_events(tmp_path) -> None:
+    """JsonlStreamState tracks event count, type, and recent events."""
+    thread_id = "019b73c4-0c3f-7701-a0bb-aac6b4d8a3bc"
+
+    codex_path = tmp_path / "codex"
+    codex_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        "\n"
+        "sys.stdin.read()\n"
+        f"print(json.dumps({{'type': 'thread.started', 'thread_id': '{thread_id}'}}), flush=True)\n"
+        "print(json.dumps({'type': 'item.started', 'item': {'id': 'i1', 'type': 'function_call', 'name': 'shell', 'arguments': 'echo hi'}}), flush=True)\n"
+        "print(json.dumps({'type': 'item.completed', 'item': {'id': 'i1', 'type': 'function_call_output', 'output': 'hi'}}), flush=True)\n"
+        "print(json.dumps({'type': 'item.completed', 'item': {'id': 'item_0', 'type': 'agent_message', 'text': 'ok'}}), flush=True)\n",
+        encoding="utf-8",
+    )
+    codex_path.chmod(0o755)
+
+    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    events = [evt async for evt in runner.run("hi", None)]
+
+    # Verify stream tracking
+    stream = runner.current_stream
+    assert stream is not None
+    assert stream.event_count >= 3  # at least the 3 events above
+    assert stream.last_stdout_at > 0
+    assert len(stream.recent_events) > 0
+    # last event type should be set
+    assert stream.last_event_type is not None
+
+    # Verify PID was injected into StartedEvent meta
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.meta is not None
+    assert "pid" in started.meta
+    assert isinstance(started.meta["pid"], int)
+
+
+def test_jsonl_stream_state_defaults() -> None:
+    """JsonlStreamState initialises with correct defaults."""
+    from untether.runner import JsonlStreamState
+
+    stream = JsonlStreamState(expected_session=None)
+    assert stream.last_stdout_at == 0.0
+    assert stream.last_event_type is None
+    assert stream.last_event_tool is None
+    assert stream.event_count == 0
+    assert len(stream.recent_events) == 0
+    assert stream.stderr_capture == []
+
+
+def test_jsonl_stream_state_recent_events_ring_buffer() -> None:
+    """Recent events deque respects maxlen=10."""
+    from untether.runner import JsonlStreamState
+
+    stream = JsonlStreamState(expected_session=None)
+    for i in range(15):
+        stream.recent_events.append((float(i), f"type_{i}"))
+    assert len(stream.recent_events) == 10
+    # Oldest entries should have been evicted
+    assert stream.recent_events[0] == (5.0, "type_5")

@@ -1749,7 +1749,7 @@ async def test_progress_edits_stall_monitor_logs_warning(
 
     # Check that stall was detected and notification sent
     assert edits._stall_warned is True
-    assert edits._stall_notified is True
+    assert edits._stall_warn_count >= 1
     assert len(transport.send_calls) == 1
     msg_text = transport.send_calls[0]["message"].text
     assert "No progress for" in msg_text
@@ -1781,36 +1781,40 @@ async def test_progress_edits_stall_detected_without_any_events() -> None:
         tg.start_soon(drive)
 
     assert edits._stall_warned is True
-    assert edits._stall_notified is True
+    assert edits._stall_warn_count >= 1
     assert len(transport.send_calls) == 1
 
 
 @pytest.mark.anyio
-async def test_progress_edits_stall_notification_sent_once() -> None:
-    """Stall notification is only sent once, not on every check interval."""
+async def test_progress_edits_stall_notification_repeats_after_interval() -> None:
+    """Stall notification repeats after _stall_repeat_seconds."""
     transport = FakeTransport()
     presenter = _KeyboardPresenter()
     clock = _FakeClock(start=100.0)
     edits = _make_edits(transport, presenter, clock=clock)
     edits._stall_check_interval = 0.01
     edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.02  # very short for test
 
     edits._last_event_at = 100.0
 
     async with anyio.create_task_group() as tg:
 
         async def drive() -> None:
+            # First warning
             clock.set(100.1)
-            # Wait long enough for multiple check intervals
-            await anyio.sleep(0.1)
+            await anyio.sleep(0.05)
+            # Advance past repeat interval for second warning
+            clock.set(100.2)
+            await anyio.sleep(0.05)
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
         tg.start_soon(drive)
 
     assert edits._stall_warned is True
-    # Only one notification despite multiple stall checks
-    assert len(transport.send_calls) == 1
+    assert edits._stall_warn_count >= 2
+    assert len(transport.send_calls) >= 2
 
 
 @pytest.mark.anyio
@@ -1823,7 +1827,7 @@ async def test_progress_edits_stall_recovery_clears_warning() -> None:
 
     # Simulate stall state
     edits._stall_warned = True
-    edits._stall_notified = True
+    edits._stall_warn_count = 2
     edits._last_event_at = 100.0
 
     # Receive a new event
@@ -1838,4 +1842,105 @@ async def test_progress_edits_stall_recovery_clears_warning() -> None:
     await edits.on_event(evt)
 
     assert edits._stall_warned is False
-    assert edits._stall_notified is False
+    assert edits._stall_warn_count == 0
+
+
+@pytest.mark.anyio
+async def test_progress_edits_stall_includes_last_action() -> None:
+    """Stall notification includes last action summary."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+
+    # Simulate an action so _last_action_summary() returns something
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="codex",
+        action=Action(id="a1", kind="tool", title="Agent"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)  # reset after on_event advanced it
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            clock.set(100.1)
+            await anyio.sleep(0.05)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    assert edits._stall_warned is True
+    msg_text = transport.send_calls[-1]["message"].text
+    assert "Last:" in msg_text
+    assert "Agent" in msg_text
+
+
+@pytest.mark.anyio
+async def test_progress_edits_peak_idle_tracked() -> None:
+    """Peak idle time is tracked across the session."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+
+    assert edits._peak_idle == 0.0
+    # Simulate: no events for a while, then recover
+    edits._stall_warned = True
+    edits._stall_warn_count = 1
+    edits._last_event_at = 100.0
+
+    from untether.model import Action, ActionEvent
+
+    clock.set(200.0)
+    evt = ActionEvent(
+        engine="codex",
+        action=Action(id="x", kind="command", title="echo"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    assert edits._stall_warned is False
+
+
+def test_progress_edits_pid_and_stream_defaults() -> None:
+    """ProgressEdits starts with pid=None and stream=None."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+    assert edits.pid is None
+    assert edits.stream is None
+
+
+def test_last_action_summary_no_actions() -> None:
+    """Returns None when no actions have been tracked."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+    assert edits._last_action_summary() is None
+
+
+@pytest.mark.anyio
+async def test_last_action_summary_with_actions() -> None:
+    """Returns summary of most recent action."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="codex",
+        action=Action(id="a1", kind="tool", title="Bash"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    summary = edits._last_action_summary()
+    assert summary is not None
+    assert "tool:Bash" in summary
+    assert "running" in summary
