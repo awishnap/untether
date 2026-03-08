@@ -191,7 +191,7 @@ journalctl --user -u untether-dev -f
 
 ### Automated testing via Telegram MCP
 
-Integration tests are automated via Telegram MCP tools — Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, and verifies expected behaviour. No manual Telegram interaction is needed for most tests.
+All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash. Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, verifies expected behaviour, checks logs, and creates GitHub issues for any bugs found.
 
 **MCP tools used:** `send_message`, `get_history`, `get_messages`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`
 

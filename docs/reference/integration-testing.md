@@ -13,7 +13,7 @@ Structured, repeatable integration test process run against `@untether_dev_bot` 
 
 ## Automated Testing via Telegram MCP
 
-Integration tests are run by Claude Code using Telegram MCP tools, replacing manual Telegram interaction for most test tiers. The relevant MCP tools are:
+All integration test tiers are fully automated by Claude Code using Telegram MCP tools and the Bash tool. The relevant MCP tools are:
 
 - `send_message` — send test prompts and commands to engine chats
 - `get_history` / `get_messages` — read back bot responses and verify expected behaviour
@@ -267,7 +267,7 @@ Integration tests are run by Claude Code via Telegram MCP tools (see "Automated 
 
 7. Run Tier 3 (Telegram transport) — 15 minutes
    Run T1-T10 based on what changed. Always run T6 (emoji) and T8 (stale buttons)
-   T1 (voice) and T5 (media group) require manual steps
+   T1 (voice) uses send_voice, T5 (media group) uses send_file
 
 8. Run Tier 4 (overrides) — 10 minutes
    Run O1-O9 if config/override code changed. Always run O1 and O8
