@@ -397,6 +397,17 @@ systemctl --user status untether-dev
 
 ## Known Limitations and Gotchas
 
+### Unexpected engine behaviour
+
+During integration testing, Claude Code must watch for and note any **unexpected engine behaviour**, especially:
+
+- **Phantom responses**: Engine produces substantive output from empty/garbage input (e.g. empty voice transcription triggers an unrelated long response). This may indicate session state leaking, hallucinated context, or the engine inventing a task.
+- **Wrong engine running**: Directive routing sends to the wrong engine, or engine override doesn't take effect.
+- **Session cross-contamination**: Response references files/context from a different engine's test project.
+- **Disproportionate cost**: Simple test prompt generates unexpectedly high token/cost usage.
+
+When detected, note the engine, chat ID, message IDs, and exact behaviour. Create a GitHub issue if the root cause is in Untether (e.g. wrong context forwarded, preamble confusion). If the root cause is upstream engine behaviour, note it in the test results as an engine quirk rather than an Untether bug.
+
 ### Timing and determinism
 
 - **Stall tests (S1)** are timing-dependent — thresholds vary by `[watchdog]` config. Check `~/.untether-dev/untether.toml` for current values.

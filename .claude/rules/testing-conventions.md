@@ -87,6 +87,10 @@ Integration tests are automated via Telegram MCP tools by Claude Code during the
 
 After integration tests, use Bash tool to check dev bot logs for warnings/errors and create GitHub issues for any Untether bugs found. Distinguish Untether bugs from upstream engine API errors.
 
+### Detecting unexpected engine behaviour
+
+Watch for phantom responses (substantive output from empty input), session cross-contamination, wrong engine running, or disproportionate cost. Note the engine, chat ID, message IDs, and exact behaviour. Create a GitHub issue if the root cause is in Untether; note as an engine quirk if upstream.
+
 ### Additional MCP tools
 
 - `send_voice` — OGG/Opus voice files for T1 (voice message test)
