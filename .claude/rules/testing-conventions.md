@@ -115,3 +115,7 @@ All integration test tiers are fully automatable by Claude Code.
 | `test_opencode_runner.py` | OpenCode event translation |
 | `test_pi_runner.py` | Pi event translation, session ID promotion |
 | `test_settings.py` | Config validation, engine config parsing |
+| `test_build_args.py` | CLI argument construction for all 6 engines |
+| `test_loop_coverage.py` | Update loop edge cases, message routing, shutdown |
+| `test_exec_runner.py` | Event tracking, ring buffer, PID in StartedEvent meta |
+| `test_runner_utils.py` | Error formatting, drain_stderr, stderr sanitisation |
