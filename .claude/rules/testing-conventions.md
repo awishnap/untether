@@ -50,6 +50,55 @@ assert all(isinstance(e, ActionEvent) for e in events[1:-1])
 - Run all: `uv run pytest`
 - Run specific: `uv run pytest tests/test_claude_control.py -x`
 
+## Integration testing (MANDATORY before releases)
+
+Unit tests cover code paths but NOT live Telegram interaction. Before every version bump, run the structured integration test suite against `@untether_dev_bot`. See `docs/reference/integration-testing.md` for the full playbook.
+
+- **Patch**: Tier 7 (command smoke) + Tier 1 (affected engine + Claude) + relevant Tier 6
+- **Minor**: Tier 7 + Tier 1 (all 6 engines) + Tier 2 (Claude interactive) + relevant Tier 3-4 + Tier 6 + upgrade path
+- **Major**: ALL tiers (1-7), ALL engines, full upgrade path
+
+**NEVER use `@hetz_lba1_bot` (production) for testing. ALWAYS use `@untether_dev_bot` (dev service).**
+
+## Integration testing via Telegram MCP
+
+Integration tests are automated via Telegram MCP tools by Claude Code during the release process. See `docs/reference/integration-testing.md` for the full playbook.
+
+### Test chats
+
+| Chat | Chat ID |
+|------|---------|
+| `ut-dev: claude` | 5284581592 |
+| `ut-dev: codex` | 4929463515 |
+| `ut-dev: opencode` | 5200822877 |
+| `ut-dev: pi` | 5156256333 |
+| `ut-dev: gemini` | 5207762142 |
+| `ut-dev: amp` | 5230875989 |
+
+### Pattern
+
+1. `send_message` — send test prompt or command to engine chat
+2. Wait for bot response (sleep or poll)
+3. `get_history`/`get_messages` — read back response, verify content
+4. `list_inline_buttons` → `press_inline_button` for interactive tests
+5. `reply_to_message` for resume/session continuation tests
+
+### Log inspection and issue creation
+
+After integration tests, use Bash tool to check dev bot logs for warnings/errors and create GitHub issues for any Untether bugs found. Distinguish Untether bugs from upstream engine API errors.
+
+### Detecting unexpected engine behaviour
+
+Watch for phantom responses (substantive output from empty input), session cross-contamination, wrong engine running, or disproportionate cost. Note the engine, chat ID, message IDs, and exact behaviour. Create a GitHub issue if the root cause is in Untether; note as an engine quirk if upstream.
+
+### Additional MCP tools
+
+- `send_voice` — OGG/Opus voice files for T1 (voice message test)
+- `send_file` — file upload/media group tests (T2, T5)
+- Bash tool — `kill -TERM` for B4 (SIGTERM), `journalctl` for B5 (log inspection)
+
+All integration test tiers are fully automatable by Claude Code.
+
 ## Key test files
 
 | File | Covers |
@@ -66,3 +115,7 @@ assert all(isinstance(e, ActionEvent) for e in events[1:-1])
 | `test_opencode_runner.py` | OpenCode event translation |
 | `test_pi_runner.py` | Pi event translation, session ID promotion |
 | `test_settings.py` | Config validation, engine config parsing |
+| `test_build_args.py` | CLI argument construction for all 6 engines |
+| `test_loop_coverage.py` | Update loop edge cases, message routing, shutdown |
+| `test_exec_runner.py` | Event tracking, ring buffer, PID in StartedEvent meta |
+| `test_runner_utils.py` | Error formatting, drain_stderr, stderr sanitisation |

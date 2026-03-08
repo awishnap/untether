@@ -12,7 +12,7 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By particip
 
 - **Python 3.12+** — `uv python install 3.14`
 - **uv** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- At least one agent CLI on PATH for integration testing: `codex`, `claude`, `opencode`, or `pi`
+- At least one agent CLI on PATH for integration testing: `claude`, `codex`, `opencode`, `pi`, `gemini`, or `amp`
 
 ### Development setup
 
@@ -99,7 +99,7 @@ uv run ruff format src tests            # auto-format
 ## Architecture overview
 
 ```
-Telegram ←→ TelegramPresenter ←→ RunnerBridge ←→ Runner (claude/codex/opencode/pi)
+Telegram ←→ TelegramPresenter ←→ RunnerBridge ←→ Runner (claude/codex/opencode/pi/gemini/amp)
                                       |
                                  ProgressTracker
 ```

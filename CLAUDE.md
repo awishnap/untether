@@ -138,32 +138,36 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 
 ## Tests
 
-1472 tests, 80% coverage threshold. Key test files:
+1548 unit tests, 80% coverage threshold. Integration testing against `@untether_dev_bot` is **mandatory before every release** — see `docs/reference/integration-testing.md` for the full playbook with per-release-type tier requirements (patch/minor/major). All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash.
 
-- `test_claude_control.py` — 56 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
-- `test_callback_dispatch.py` — 28 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
-- `test_exec_bridge.py` — 80 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel, approval-aware stall threshold, session summary, PID/stream threading
-- `test_ask_user_question.py` — 27 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
-- `test_diff_preview.py` — 10 tests: Edit diff display, Write content preview, Bash command display, line/char truncation
-- `test_cost_tracker.py` — 56 tests: cost accumulation, per-run/daily budget thresholds, warning levels, daily reset, auto-cancel flag
-- `test_export_command.py` — 28 tests: session event recording, markdown/JSON export formatting, usage integration, session trimming
-- `test_browse_command.py` — 36 tests: path registry, directory listing, file preview, inline keyboard buttons, project-aware root resolution, security (path traversal)
-- `test_meta_line.py` — 26 tests: model name shortening, meta line formatting, ProgressTracker meta storage/snapshot, footer ordering (context/meta/resume)
-- `test_runner_utils.py` — error formatting helpers, drain_stderr capture, enriched error messages
+Key test files:
+
+- `test_claude_control.py` — 82 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
+- `test_callback_dispatch.py` — 25 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
+- `test_exec_bridge.py` — 85 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel, approval-aware stall threshold, session summary, PID/stream threading
+- `test_ask_user_question.py` — 25 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
+- `test_diff_preview.py` — 14 tests: Edit diff display, Write content preview, Bash command display, line/char truncation
+- `test_cost_tracker.py` — 12 tests: cost accumulation, per-run/daily budget thresholds, warning levels, daily reset, auto-cancel flag
+- `test_export_command.py` — 15 tests: session event recording, markdown/JSON export formatting, usage integration, session trimming
+- `test_browse_command.py` — 39 tests: path registry, directory listing, file preview, inline keyboard buttons, project-aware root resolution, security (path traversal)
+- `test_meta_line.py` — 43 tests: model name shortening, meta line formatting, ProgressTracker meta storage/snapshot, footer ordering (context/meta/resume)
+- `test_runner_utils.py` — 34 tests: error formatting helpers, drain_stderr capture, enriched error messages, stderr sanitisation
 - `test_shutdown.py` — 4 tests: shutdown state transitions, idempotency, reset
 - `test_preamble.py` — 5 tests: default preamble injection, disabled preamble, custom text override, empty text disables, settings defaults
 - `test_restart_command.py` — 3 tests: command triggers shutdown, idempotent response, command id
-- `test_cooldown_bypass.py` — 3 tests: outline bypass, rapid retry auto-deny, no-text auto-deny
-- `test_verbose_progress.py` — 18 tests: format_verbose_detail() for each tool type, MarkdownFormatter verbose mode, compact regression
-- `test_verbose_command.py` — 8 tests: /verbose toggle on/off/clear, backend id
-- `test_config_command.py` — 108 tests: home page, plan mode/ask mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility
-- `test_pi_compaction.py` — 7 tests: compaction start/end, aborted, no tokens, sequence
-- `test_proc_diag.py` — 27 tests: format_diag, is_cpu_active, collect_proc_diag (Linux /proc reads), ProcessDiag defaults
+- `test_cooldown_bypass.py` — 17 tests: outline bypass, rapid retry auto-deny, no-text auto-deny, cooldown escalation
+- `test_verbose_progress.py` — 21 tests: format_verbose_detail() for each tool type, MarkdownFormatter verbose mode, compact regression
+- `test_verbose_command.py` — 7 tests: /verbose toggle on/off/clear, backend id
+- `test_config_command.py` — 181 tests: home page, plan mode/ask mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility
+- `test_pi_compaction.py` — 6 tests: compaction start/end, aborted, no tokens, sequence
+- `test_proc_diag.py` — 24 tests: format_diag, is_cpu_active, collect_proc_diag (Linux /proc reads), ProcessDiag defaults
 - `test_exec_runner.py` — 28 tests: event tracking (event_count, recent_events ring buffer, PID in StartedEvent meta), JsonlStreamState defaults
+- `test_build_args.py` — 30 tests: CLI argument construction for all 6 engines, model/reasoning/permission flags
+- `test_loop_coverage.py` — 29 tests: update loop edge cases, message routing, callback dispatch, shutdown integration
 
 ## Development
 
-Two instances run on lba-1 — production (PyPI release) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref.
+Two instances run on lba-1 — production (PyPI release) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref. See `docs/reference/integration-testing.md` for the structured integration test playbook run against `@untether_dev_bot` before every release. All integration test tiers are fully automated by Claude Code via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`, `send_voice`, `send_file`) and Bash (`journalctl`, `kill -TERM`, FD/zombie checks).
 
 | | Production (`@hetz_lba1_bot`) | Dev (`@untether_dev_bot`) |
 |---|---|---|
