@@ -58,6 +58,8 @@ Before ANY version bump (patch, minor, or major), run the structured integration
 
 **NEVER skip integration testing. NEVER test against production (`@hetz_lba1_bot`).**
 
+Integration tests are automated via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`). Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, and verifies expected behaviour. See `docs/reference/integration-testing.md` for chat IDs, workflow, and test details.
+
 ## After changes
 
 ```bash

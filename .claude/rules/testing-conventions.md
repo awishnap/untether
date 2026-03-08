@@ -60,6 +60,34 @@ Unit tests cover code paths but NOT live Telegram interaction. Before every vers
 
 **NEVER use `@hetz_lba1_bot` (production) for testing. ALWAYS use `@untether_dev_bot` (dev service).**
 
+## Integration testing via Telegram MCP
+
+Integration tests are automated via Telegram MCP tools by Claude Code during the release process. See `docs/reference/integration-testing.md` for the full playbook.
+
+### Test chats
+
+| Chat | Chat ID |
+|------|---------|
+| `ut-dev: claude` | 5284581592 |
+| `ut-dev: codex` | 4929463515 |
+| `ut-dev: opencode` | 5200822877 |
+| `ut-dev: pi` | 5156256333 |
+| `ut-dev: gemini` | 5207762142 |
+| `ut-dev: amp` | 5230875989 |
+
+### Pattern
+
+1. `send_message` — send test prompt or command to engine chat
+2. Wait for bot response (sleep or poll)
+3. `get_history`/`get_messages` — read back response, verify content
+4. `list_inline_buttons` → `press_inline_button` for interactive tests
+5. `reply_to_message` for resume/session continuation tests
+
+### Tests requiring manual steps
+
+- **T1 (voice)**, **T5 (media groups)** — require Telegram client interaction
+- **B4 (SIGTERM)** — requires shell access (`kill -TERM`)
+
 ## Key test files
 
 | File | Covers |

@@ -11,6 +11,46 @@ Structured, repeatable integration test process run against `@untether_dev_bot` 
 | **Test chats** | 6 dedicated Telegram groups in the `ut-dev` folder, one per engine |
 | **Engines** | Claude, Codex, OpenCode, Pi, Gemini, Amp |
 
+## Automated Testing via Telegram MCP
+
+Integration tests are run by Claude Code using Telegram MCP tools, replacing manual Telegram interaction for most test tiers. The relevant MCP tools are:
+
+- `send_message` — send test prompts and commands to engine chats
+- `get_history` / `get_messages` — read back bot responses and verify expected behaviour
+- `list_inline_buttons` — inspect inline keyboards (approval buttons, `/config` menus, `/browse`)
+- `press_inline_button` — interact with inline keyboards (approve/deny, toggle settings)
+- `reply_to_message` — reply to resume lines for session continuation tests (U4)
+
+### Test chats
+
+Tests are sent to 6 dedicated `ut-dev:` engine chats via `@untether_dev_bot`:
+
+| Chat | Chat ID |
+|------|---------|
+| `ut-dev: claude` | 5284581592 |
+| `ut-dev: codex` | 4929463515 |
+| `ut-dev: opencode` | 5200822877 |
+| `ut-dev: pi` | 5156256333 |
+| `ut-dev: gemini` | 5207762142 |
+| `ut-dev: amp` | 5230875989 |
+
+### Workflow
+
+1. Claude Code sends a test prompt via `send_message` to the appropriate engine chat
+2. Waits for the bot to process (sleep or poll via `get_history`)
+3. Reads back the response via `get_history`/`get_messages` and verifies expected content
+4. For interactive tests: uses `list_inline_buttons` and `press_inline_button` to interact with approval/config buttons
+5. For resume tests: uses `reply_to_message` to reply to the resume line
+
+### Tests requiring manual steps
+
+Some tests cannot be fully automated via MCP and still require manual interaction or shell access:
+
+- **T1 (voice message)** — requires recording and sending a voice note
+- **T5 (media group)** — requires sending a batch of images/files via Telegram client
+- **B4 (SIGTERM drain)** — requires `kill -TERM` from the shell
+- **B5 (log inspection)** — requires `journalctl` access
+
 ## Engine Feature Matrix
 
 | Capability | Claude | Codex | OpenCode | Pi | Gemini | Amp |
@@ -186,6 +226,8 @@ journalctl --user -u untether-dev --since "1 minute ago" | grep -iE "error|parse
 
 ## Execution Process
 
+Integration tests are run by Claude Code via Telegram MCP tools (see "Automated Testing via Telegram MCP" above). Claude Code sends prompts and commands to the `ut-dev:` engine chats, reads back responses, interacts with inline buttons, and verifies expected behaviour. Tests that require manual steps (voice, media groups, SIGTERM, log inspection) are called out explicitly.
+
 ### Before every version bump
 
 ```
@@ -199,23 +241,25 @@ journalctl --user -u untether-dev --since "1 minute ago" | grep -iE "error|parse
    journalctl --user -u untether-dev -f
 
 4. Run Tier 7 (command smoke) — 2 minutes
-   Send each command in any engine chat, verify responses
+   Claude Code sends each command to an engine chat via MCP, verifies responses
 
 5. Run Tier 1 (universal) — 30 minutes
-   Run U1-U10 in ALL 6 engine chats (claude, codex, opencode, pi, gemini, amp)
+   Claude Code runs U1-U10 in ALL 6 engine chats via MCP
    Focus on: progress rendering, final message, model footer, resume
 
 6. Run Tier 2 (Claude-specific) — 15 minutes
-   Run C1-C7 in Claude test chat with plan mode ON
+   Claude Code runs C1-C7 in Claude test chat with plan mode ON
+   Uses list_inline_buttons/press_inline_button for approval tests
 
 7. Run Tier 3 (Telegram transport) — 15 minutes
    Run T1-T10 based on what changed. Always run T6 (emoji) and T8 (stale buttons)
+   T1 (voice) and T5 (media group) require manual steps
 
 8. Run Tier 4 (overrides) — 10 minutes
    Run O1-O9 if config/override code changed. Always run O1 and O8
 
 9. Run Tier 5 (cost/operational) — 5 minutes
-   Run B1-B3 if cost tracking changed. Always run B5 (log inspection)
+   Run B1-B3 if cost tracking changed. B4 (SIGTERM) and B5 (logs) require shell access
 
 10. Run Tier 6 (stress) — 15 minutes
     Pick 2-3 stress tests based on what changed:
@@ -226,7 +270,7 @@ journalctl --user -u untether-dev --since "1 minute ago" | grep -iE "error|parse
 11. Run upgrade path tests (minor/major only) — 5 minutes
     Config compatibility, state file compatibility
 
-12. Check logs for warnings/errors
+12. Check logs for warnings/errors (manual)
     journalctl --user -u untether-dev --since "1 hour ago" | grep -E "WARNING|ERROR"
 
 13. If all pass: commit, tag, release

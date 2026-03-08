@@ -34,6 +34,8 @@
 
 **ALWAYS use `@untether_dev_bot`** (dev service) for integration testing. NEVER test against `@hetz_lba1_bot` (production).
 
+Integration tests are automated via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`). Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, and verifies expected behaviour. See `docs/reference/integration-testing.md` for chat IDs, workflow, and test details.
+
 ## Changelog format
 
 - Sections: `### fixes`, `### changes`, `### breaking`, `### docs`, `### tests`

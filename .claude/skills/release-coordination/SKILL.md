@@ -189,6 +189,33 @@ journalctl --user -u untether-dev -f
 | Progress/formatting (`markdown.py`) | U3, T6, T7, S4, S8 |
 | Commands (`commands/*.py`) | Tier 7 (all) + specific command test |
 
+### Automated testing via Telegram MCP
+
+Integration tests are automated via Telegram MCP tools — Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, and verifies expected behaviour. No manual Telegram interaction is needed for most tests.
+
+**MCP tools used:** `send_message`, `get_history`, `get_messages`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`
+
+**Test chat IDs:**
+
+| Chat | Chat ID |
+|------|---------|
+| `ut-dev: claude` | 5284581592 |
+| `ut-dev: codex` | 4929463515 |
+| `ut-dev: opencode` | 5200822877 |
+| `ut-dev: pi` | 5156256333 |
+| `ut-dev: gemini` | 5207762142 |
+| `ut-dev: amp` | 5230875989 |
+
+**Workflow pattern:**
+
+1. `send_message` — send test prompt or command to engine chat
+2. Wait for bot response (sleep 10-30s depending on engine)
+3. `get_history`/`get_messages` — read back response, verify content
+4. `list_inline_buttons` → `press_inline_button` for interactive tests
+5. `reply_to_message` for resume/session continuation tests
+
+**Tests requiring manual steps:** T1 (voice), T5 (media groups), B4 (SIGTERM)
+
 ### Checklist
 
 - [ ] Dev bot restarted: `systemctl --user restart untether-dev`

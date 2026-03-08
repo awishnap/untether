@@ -165,7 +165,7 @@ Key test files:
 
 ## Development
 
-Two instances run on lba-1 — production (PyPI release) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref. See `docs/reference/integration-testing.md` for the structured integration test playbook run against `@untether_dev_bot` before every release.
+Two instances run on lba-1 — production (PyPI release) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref. See `docs/reference/integration-testing.md` for the structured integration test playbook run against `@untether_dev_bot` before every release. Integration tests are automated via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`).
 
 | | Production (`@hetz_lba1_bot`) | Dev (`@untether_dev_bot`) |
 |---|---|---|
