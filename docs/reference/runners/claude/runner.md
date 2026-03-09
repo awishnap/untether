@@ -108,6 +108,19 @@ Notes:
 
 ---
 
+## Environment variables
+
+The Claude runner modifies the subprocess environment before spawning `claude`:
+
+| Variable | Behaviour |
+|----------|-----------|
+| `UNTETHER_SESSION` | Set to `1`. Signals to Claude Code plugins (hooks, rules, agents) that the session is running via Untether/Telegram. Plugins can check `[ -n "${UNTETHER_SESSION:-}" ]` in shell hooks to adjust behaviour — e.g. skip blocking Stop hooks that would displace the user's requested content in Telegram's single-message output. See [PitchDocs](https://github.com/littlebearapps/lba-plugins) for a reference implementation. |
+| `ANTHROPIC_API_KEY` | Stripped from the environment by default so Claude Code uses subscription billing. Set `use_api_billing = true` in `[claude]` config to keep the key and use API billing instead. |
+
+This is not a security mechanism — `UNTETHER_SESSION` is a simple presence flag. It carries no credentials and poses no risk if set outside Untether. See the [environment variables reference](../../env-vars.md) for all variables.
+
+---
+
 ## Code changes (by file)
 
 ### 1) New file: `src/untether/runners/claude.py`

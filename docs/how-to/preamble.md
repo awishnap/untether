@@ -48,7 +48,29 @@ Set `text` to your custom string. When `text` is `null` (the default), Untether 
 
 When ask mode is enabled (via `/config`), Untether appends a line to the preamble encouraging the agent to use `AskUserQuestion` with structured options. When ask mode is disabled, it appends a line discouraging interactive questions so the agent proceeds with defaults instead.
 
+## Hook awareness
+
+Claude Code plugins can install hooks that fire at session end (Stop hooks). In a terminal, these are harmless — the user can scroll up. But in Telegram, only the final assistant message is visible. If a Stop hook causes Claude to spend its final response addressing hook concerns, the user's actual content is lost.
+
+Untether addresses this in two ways:
+
+1. **Preamble guidance** — the default preamble includes: "If hooks fire at session end, your final response MUST still contain the user's requested content. Hook concerns are secondary."
+
+2. **`UNTETHER_SESSION` env var** — the Claude runner sets `UNTETHER_SESSION=1` in the subprocess environment. Well-behaved Claude Code plugins check for this variable and skip blocking hooks in Telegram sessions. For example, [PitchDocs](https://github.com/littlebearapps/lba-plugins) context-guard detects `$UNTETHER_SESSION` and allows the session to stop without blocking.
+
+!!! tip "For plugin authors"
+    If your Claude Code plugin includes Stop hooks, add an early exit for Untether sessions:
+
+    ```bash
+    # Skip blocking in Untether sessions — Stop hook blocks displace
+    # user-requested content in the Telegram final message.
+    [ -n "${UNTETHER_SESSION:-}" ] && echo '{}' && exit 0
+    ```
+
+    This is not a security bypass — it simply prevents your hook from interfering with Telegram's single-message output model. See the [interference audit](../audits/pitchdocs-context-guard-interference.md) for a detailed case study.
+
 ## Related
 
 - [Configuration reference](../reference/config.md) — full `[preamble]` config
 - [Inline settings](inline-settings.md) — `/config` toggles including ask mode
+- [Environment variables](../reference/env-vars.md) — `UNTETHER_SESSION` and other env vars

@@ -24,3 +24,14 @@ Untether supports a small set of environment variables for logging and runtime b
 |----------|-------------|
 | `PI_CODING_AGENT_DIR` | Override Pi agent session directory base path. |
 
+## Runner environment
+
+These variables are set automatically by Untether in the engine subprocess environment. They are not user-configurable.
+
+| Variable | Set by | Description |
+|----------|--------|-------------|
+| `UNTETHER_SESSION` | Claude runner | Set to `1` for all Claude Code subprocess invocations. Enables Claude Code plugins to detect Untether sessions and adjust behaviour — for example, skipping blocking Stop hooks that would displace user-requested content in Telegram. |
+
+!!! note "Not a security concern"
+    `UNTETHER_SESSION` is a simple signal variable, not a credential or secret. It tells Claude Code plugins that the session is running via Telegram so they can avoid interfering with Untether's single-message output model. Plugins like [PitchDocs](https://github.com/littlebearapps/lba-plugins) check for this variable and skip blocking hooks that would otherwise consume the final response with meta-commentary instead of the user's requested content. See the [PitchDocs interference audit](../audits/pitchdocs-context-guard-interference.md) for the full analysis.
+

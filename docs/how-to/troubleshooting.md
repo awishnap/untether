@@ -166,6 +166,28 @@ Run `untether doctor` to validate voice configuration.
 - **Stateless mode** (`session_mode = "stateless"`): You must **reply** to a message that contains a resume token. Plain messages start new sessions.
 - If resume fails silently, the previous session may have been corrupted. Untether auto-clears broken resume tokens (0-turn sessions).
 
+## Claude Code plugin interference
+
+**Symptoms:** Agent completes successfully but the response is about "hooks", "context docs", or "false positive" instead of the content you actually asked for. The run shows `done` with a short answer that doesn't match your request.
+
+This happens when Claude Code plugins with **Stop hooks** consume the final response. In a terminal, the user can scroll up to see earlier output. In Telegram, only the final message is visible — so if a Stop hook causes Claude to address hook concerns in its last turn, the actual content is replaced.
+
+**Affected plugins:** Any Claude Code plugin that uses `"decision": "block"` in a Stop hook. The most common example is [PitchDocs](https://github.com/littlebearapps/lba-plugins) context-guard, which nudges Claude to update AI context docs when structural files change.
+
+**Fix:**
+
+1. **Update the plugin** — PitchDocs v1.20+ checks for `$UNTETHER_SESSION` and automatically skips blocking Stop hooks in Telegram sessions. Run `/pitchdocs:context-guard install` in your project to update the hooks.
+
+2. **Verify `UNTETHER_SESSION` is set** — Untether v0.34.4+ sets `UNTETHER_SESSION=1` in the Claude runner subprocess environment. If you're on an older version, upgrade: `pipx upgrade untether`
+
+3. **For custom plugins** — add this to your Stop hook script:
+
+    ```bash
+    [ -n "${UNTETHER_SESSION:-}" ] && echo '{}' && exit 0
+    ```
+
+This is not a security concern — `UNTETHER_SESSION` is a simple signal variable that tells plugins the session is running via Telegram. See the [interference audit](../audits/pitchdocs-context-guard-interference.md) for a detailed case study.
+
 ## Cost budget blocking runs
 
 **Symptoms:** "Budget exceeded" message, or runs are cancelled mid-stream.
