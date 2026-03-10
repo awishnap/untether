@@ -219,7 +219,7 @@ GitHub Actions CI runs on push to master and on PRs:
 
 All third-party actions are pinned to commit SHAs (supply chain protection). Top-level `permissions: {}` restricts to least-privilege.
 
-Dependabot auto-merge (`dependabot-auto-merge.yml`) auto-squash-merges patch and minor dependency updates after CI passes. Major version updates get a comment requesting manual review.
+Dependabot auto-merge (`dependabot-auto-merge.yml`) auto-squash-merges dependency updates after CI passes. GitHub Actions deps (CI-only, never shipped) are auto-merged for all version bumps including major. Python deps (shipped in wheel) are auto-merged for patch/minor only; major bumps get flagged for manual review.
 
 Release pipeline (`release.yml`) uses PyPI trusted publishing with OIDC.
 
