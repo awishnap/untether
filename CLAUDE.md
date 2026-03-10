@@ -214,6 +214,7 @@ GitHub Actions CI runs on push to master and on PRs:
 | install-test | Clean wheel install + smoke-test imports (catches undeclared deps) |
 | pip-audit | Dependency vulnerability scanning (PyPA advisory DB) |
 | bandit | Python SAST (security static analysis) |
+| codeql | CodeQL code scanning (Python + Actions), blocks PRs on new alerts |
 | docs | Zensical docs build |
 
 All third-party actions are pinned to commit SHAs (supply chain protection). Top-level `permissions: {}` restricts to least-privilege.
