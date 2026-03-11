@@ -27,7 +27,8 @@ Open your Telegram chat with the bot and send:
 /planmode on
 ```
 
-<!-- SCREENSHOT: /planmode on response showing "plan mode: on" confirmation -->
+!!! untether "Untether"
+    plan mode: **on**
 
 The bot confirms that plan mode is now active. This setting is stored per chat and persists across sessions.
 
@@ -39,20 +40,33 @@ Send Claude Code a task that will require file changes:
 add a comment to the top of README.md explaining what this project does
 ```
 
-<!-- SCREENSHOT: user sending a task message to the bot -->
-
 Claude Code starts working and you'll see a progress message stream in.
 
 ## 4. See approval buttons
 
 When Claude Code wants to modify a file, Untether intercepts the tool call and shows you what's about to happen. You'll see a message like:
 
-<!-- SCREENSHOT: approval buttons showing Edit tool with diff preview — Approve / Deny / Pause & Outline Plan -->
+<div markdown>
+
+!!! untether "Untether"
+    ▸ Permission Request [CanUseTool] - tool: Edit (file_path=README.md)<br>
+    📝 README.md<br>
+    `- # My Project`<br>
+    `+ # My Project`<br>
+    `+ # A tool for managing widgets`
+
+<div class="tg-buttons">
+<span class="tg-btn">Approve</span>
+<span class="tg-btn">Deny</span>
+<span class="tg-btn">Pause &amp; Outline Plan</span>
+</div>
+
+</div>
 
 The message includes:
 
-- **Tool name** (e.g. Edit, Write, Bash)
-- **Diff preview** — removed lines (`- old`) and added lines (`+ new`) so you can see what will change
+- **Request type and tool name** with key parameters (e.g. file path, command)
+- **Diff preview** — 📝 file path, removed lines (`- old`) and added lines (`+ new`)
 - **Three buttons**: Approve, Deny, and Pause & Outline Plan
 
 Your phone will also buzz with a push notification so you don't miss it.
@@ -61,7 +75,11 @@ Your phone will also buzz with a push notification so you don't miss it.
 
 Tap **Approve** to let Claude Code proceed with the action. The button clears instantly — no spinner, no waiting. Claude Code continues with its work.
 
-<!-- SCREENSHOT: progress message after approving, showing the action completed -->
+!!! untether "Untether"
+    working · claude · 8s · step 2
+
+    ✓ Read `README.md`<br>
+    ▸ Edit `README.md`
 
 You may see several approval requests in a row as Claude Code works through multiple steps.
 
@@ -69,7 +87,8 @@ You may see several approval requests in a row as Claude Code works through mult
 
 If something doesn't look right, tap **Deny** instead. Claude Code receives a denial message explaining that you've blocked the action and asking it to communicate via visible text instead.
 
-<!-- SCREENSHOT: deny response — Claude Code acknowledging the denial and explaining its intent -->
+!!! untether "Untether"
+    I was going to add a comment to the top of README.md with a project description. Would you prefer I explain what I had in mind first, or should I take a different approach?
 
 This is useful when you want Claude Code to explain its reasoning before making changes. After denying, Claude Code will typically describe what it was trying to do and ask for guidance.
 
@@ -85,11 +104,21 @@ Tap it to require Claude Code to write a comprehensive plan as a visible message
 4. Key decisions and trade-offs
 5. The expected end result
 
-<!-- SCREENSHOT: Claude Code's written outline/plan appearing as visible text in the chat -->
+!!! untether "Untether"
+    Here's my plan:
+
+    1. **Read** `README.md` to understand current content
+    2. **Edit** `README.md` to add a project description comment at line 1
+    3. **Verify** the comment is correctly formatted
+
+    Files to modify: `README.md`
 
 After Claude Code writes the outline, **Approve Plan** and **Deny** buttons appear automatically — no need to type "approved":
 
-<!-- SCREENSHOT: post-outline Approve Plan / Deny buttons in Telegram -->
+<div class="tg-buttons">
+<span class="tg-btn">Approve Plan</span>
+<span class="tg-btn">Deny</span>
+</div>
 
 - Tap **Approve Plan** to let Claude Code proceed with implementation
 - Tap **Deny** to stop Claude Code and provide different direction
@@ -101,7 +130,21 @@ After Claude Code writes the outline, **Approve Plan** and **Deny** buttons appe
 
 Sometimes Claude Code needs to ask you something — like which approach to take or what naming convention to use. When Claude Code calls `AskUserQuestion`, you'll see the question in the chat with a ❓ prefix and **option buttons** for each choice:
 
-<!-- SCREENSHOT: AskUserQuestion message showing the question text with option buttons -->
+<div markdown>
+
+!!! untether "Untether"
+    ❓ What naming convention should I use for the new variables?
+
+<div class="tg-buttons">
+<span class="tg-btn">snake_case</span>
+<span class="tg-btn">camelCase</span>
+</div>
+<div class="tg-buttons">
+<span class="tg-btn">Other (type reply)</span>
+<span class="tg-btn">Deny</span>
+</div>
+
+</div>
 
 **Tap an option button** to select your answer. Claude Code receives your choice and continues immediately.
 
@@ -109,11 +152,10 @@ For multi-question flows (1 of N, 2 of N), each question appears in sequence aft
 
 If none of the options fit, tap **Other (type reply)** and type a custom answer as text. Untether routes your reply back to Claude Code, which reads it and continues.
 
-```
-You: Use snake_case for all variable names
-```
+!!! user "You"
+    Use snake_case for all variable names
 
-<!-- SCREENSHOT: user replying with text to an AskUserQuestion, Claude Code continuing -->
+Untether routes your reply back to Claude Code, which reads it and continues.
 
 You can also tap **Deny** to dismiss the question if it's not relevant.
 
@@ -128,7 +170,8 @@ Once you're comfortable with how Claude Code works, you might want less interrup
 /planmode auto
 ```
 
-<!-- SCREENSHOT: /planmode auto confirmation -->
+!!! untether "Untether"
+    plan mode: **auto**
 
 In auto mode, tool calls (Edit, Write, Bash) are still auto-approved — Claude Code works without interruption. Plan transitions are also auto-approved, so you won't see ExitPlanMode buttons. The agent preamble still requests summaries and structured output.
 
@@ -148,7 +191,8 @@ To check your current mode at any time:
 /planmode show
 ```
 
-<!-- SCREENSHOT: /planmode show output showing current mode and source -->
+!!! untether "Untether"
+    plan mode: **on** (plan mode)
 
 ## What just happened
 

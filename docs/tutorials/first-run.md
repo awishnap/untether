@@ -45,8 +45,6 @@ Untether immediately posts a progress message and updates it as the agent works:
 !!! untether "Untether"
     starting · codex · 0s
 
-<!-- SCREENSHOT: progress message in Telegram showing "working · codex · 12s · step 3" with action list -->
-
 As the agent calls tools and makes progress, you'll see updates like:
 
 !!! untether "Untether"
@@ -60,8 +58,6 @@ The progress message is edited in-place.
 
 ## 4. See the final answer
 
-<!-- SCREENSHOT: final answer message in Telegram with model/cost footer and resume line -->
-
 When the agent finishes, Untether sends a new message and replaces the progress message, so you get a notification.
 
 
@@ -70,7 +66,7 @@ When the agent finishes, Untether sends a new message and replaces the progress 
     
     Untether is a Telegram bridge for AI coding agents (Codex, Claude Code, OpenCode, Pi). It lets you run agents from chat, manage multiple projects and git worktrees, stream progress (commands, file changes, elapsed time), and resume sessions from either chat or terminal. It also supports file transfer, group topics mapped to repo/branch contexts, and multiple engines via chat commands, with a plugin system for engines/transports/commands.
 
-    codex resume 019bb89b-1b0b-7e90-96e4-c33181b49714
+    `codex resume 019bb89b-1b0b-7e90-96e4-c33181b49714`
 
 
 That last line is the **resume line**—it's how Untether knows which conversation to continue.
@@ -115,14 +111,12 @@ While the progress message is showing, tap the **cancel** button or reply to it 
     !!! user "You"
         /cancel
 
-<!-- SCREENSHOT: cancel button on progress message and the resulting "cancelled" status -->
-
 Untether sends `SIGTERM` to the agent process and posts a cancelled status:
 
 !!! failure ""
     cancelled · codex · 12s
 
-    codex resume 019bb89b-1b0b-7e90-96e4-c33181b49714
+    `codex resume 019bb89b-1b0b-7e90-96e4-c33181b49714`
 
 If a resume token was already issued (and resume lines are enabled), it will still be included so you can continue from where it stopped.
 

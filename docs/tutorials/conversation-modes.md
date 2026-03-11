@@ -14,8 +14,6 @@ This page explains what those settings mean and how to change them.
 
 ## Chat mode (auto-resume)
 
-<!-- SCREENSHOT: Telegram showing chat mode — user sends follow-up without replying, bot auto-resumes -->
-
 **What it feels like:** a normal chat assistant.
 
 !!! user "You"
@@ -44,8 +42,6 @@ Tip: set a default engine for this chat with `/agent set claude`.
 
 ## Stateless (reply-to-continue)
 
-<!-- SCREENSHOT: Telegram showing stateless mode — user replying to a message with resume line -->
-
 **What it feels like:** every message is independent until you reply.
 
 !!! user "You"
@@ -54,7 +50,7 @@ Tip: set a default engine for this chat with `/agent set claude`.
 !!! untether "Untether"
     done · codex · 8s
     ...
-    codex resume abc123
+    `codex resume abc123`
 
 To continue the same session, **reply** to a message with a resume line:
 

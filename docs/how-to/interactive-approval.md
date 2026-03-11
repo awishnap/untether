@@ -25,19 +25,39 @@ When a permission request arrives, you see a message with the tool name and a co
 
 Buttons clear immediately when you tap them — no waiting for a spinner.
 
-<!-- SCREENSHOT: Telegram approval message showing Approve / Deny / Pause & Outline Plan inline buttons beneath a tool call summary -->
+<div markdown>
+
+!!! untether "Untether"
+    ▸ Permission Request [CanUseTool] - tool: Edit (file_path=src/main.py)<br>
+    📝 src/main.py<br>
+    `- import sys`<br>
+    `+ import sys`<br>
+    `+ from pathlib import Path`
+
+<div class="tg-buttons">
+<span class="tg-btn">Approve</span>
+<span class="tg-btn">Deny</span>
+<span class="tg-btn">Pause &amp; Outline Plan</span>
+</div>
+
+</div>
 
 ## Diff previews
 
 For tools that modify files, the approval message includes a compact diff so you can see what's about to change before deciding:
 
-- **Edit**: shows removed lines (`- old`) and added lines (`+ new`), up to 4 lines each
-- **Write**: shows the first 8 lines of content to be written
-- **Bash**: shows the command to be run (up to 200 characters)
+- **Edit**: 📝 file path, removed lines (`- old`) and added lines (`+ new`), up to 4 lines each
+- **Write**: 📝 file path, then the first 8 lines of content to be written
+- **Bash**: `$ command` (up to 200 characters)
 
 This lets you make informed approve/deny decisions without leaving Telegram.
 
-<!-- SCREENSHOT: Telegram approval message with a compact diff preview showing removed and added lines for an Edit tool call -->
+!!! untether "Untether"
+    ▸ Permission Request [CanUseTool] - tool: Edit (file_path=src/main.py)<br>
+    📝 src/main.py<br>
+    `- import sys`<br>
+    `+ import sys`<br>
+    `+ from pathlib import Path`
 
 ## Answering questions
 
@@ -50,7 +70,21 @@ When Claude Code calls `AskUserQuestion`, Untether renders the question with int
 
 Toggle ask mode on or off via `/config` → Ask mode. When off, questions are auto-denied and Claude Code proceeds with defaults.
 
-<!-- SCREENSHOT: Telegram AskUserQuestion message showing option buttons and "Other (type reply)" -->
+<div markdown>
+
+!!! untether "Untether"
+    ❓ Which test framework should I use?
+
+<div class="tg-buttons">
+<span class="tg-btn">pytest</span>
+<span class="tg-btn">unittest</span>
+</div>
+<div class="tg-buttons">
+<span class="tg-btn">Other (type reply)</span>
+<span class="tg-btn">Deny</span>
+</div>
+
+</div>
 
 ## Push notifications
 

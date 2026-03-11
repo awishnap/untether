@@ -63,13 +63,11 @@ And target the project by prefixing your message:
 
 Untether runs the agent in `~/dev/happy-gadgets`, not your current directory.
 
-<!-- SCREENSHOT: Telegram showing /<project> command and response with dir: footer -->
-
 The response includes a context footer:
 
 !!! untether "Untether"
     dir: happy-gadgets<br>
-    codex resume abc123
+    `codex resume abc123`
 
 That `dir:` line tells you which project is active. When you reply, Untether automatically uses the same project—you don't need to repeat `/happy-gadgets`.
 
@@ -115,13 +113,11 @@ Untether:
 3. If the branch doesn't exist, it creates it from `worktree_base` (or the repo default) and adds the worktree
 4. Runs the agent in that worktree
 
-<!-- SCREENSHOT: Telegram showing @branch directive response with dir: project @branch footer -->
-
 The response shows both project and branch:
 
 !!! untether "Untether"
     dir: happy-gadgets @feat/new-login<br>
-    codex resume xyz789
+    `codex resume xyz789`
 
 Replies stay on the same branch. Your main checkout is untouched.
 
