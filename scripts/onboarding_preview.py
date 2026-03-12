@@ -231,5 +231,6 @@ def main() -> None:
         ScriptedServices(bot=bot, chat=private_chat, engines=engines_missing),
     )
 
+
 if __name__ == "__main__":
     main()

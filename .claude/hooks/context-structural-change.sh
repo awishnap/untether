@@ -2,7 +2,7 @@
 # context-structural-change.sh
 # Hook: PostToolUse (Write|Edit, matching structural files)
 # Purpose: Remind about context file updates after structural changes
-# Installed by: /context-guard install
+# Installed by: /contextdocs:context-guard install
 #
 # Claude Code only — OpenCode, Codex CLI, Cursor, and other tools
 # do not support Claude Code hooks.
@@ -46,6 +46,10 @@ case "$REL_PATH" in
   .claude/agents/*.md|.agents/agents/*.md)
     MSG="You modified an agent definition. AGENTS.md may need updating."
     ;;
+  .claude/rules/context-quality.md)
+    # Context Guard's own quality rule — not a project structural change
+    echo '{}'; exit 0
+    ;;
   .claude/rules/*.md)
     MSG="You modified a rule. CLAUDE.md and AGENTS.md may need updating if they list rules."
     ;;
@@ -66,7 +70,7 @@ if [ -n "$MSG" ]; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "CONTEXT REMINDER: $MSG_JSON Run /ai-context audit to check."
+    "additionalContext": "CONTEXT REMINDER: $MSG_JSON When your current task is complete, launch the context-updater agent to apply these updates automatically."
   }
 }
 EOF

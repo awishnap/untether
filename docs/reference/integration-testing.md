@@ -204,8 +204,8 @@ Run before **minor and major** releases to verify backward compatibility.
 ### Config compatibility
 
 ```bash
-# Save current production config
-cp ~/.untether/untether.toml /tmp/prod-config-backup.toml
+# Save current staging config
+cp ~/.untether/untether.toml /tmp/staging-config-backup.toml
 
 # Test current code parses old config without error
 UNTETHER_CONFIG=/tmp/prod-config-backup.toml uv run python -c "from untether.settings import load; load()"
@@ -389,7 +389,7 @@ systemctl --user restart untether-dev
 # Check status
 systemctl --user status untether-dev
 
-# NEVER restart production for testing
+# NEVER restart staging for testing
 # systemctl --user restart untether  ← WRONG
 ```
 

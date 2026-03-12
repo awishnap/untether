@@ -29,16 +29,17 @@ Step-by-step release workflow for Untether. Covers the full lifecycle from issue
 | `.github/workflows/prerelease-deps.yml` | Weekly pre-release dependency testing (informational) |
 | `scripts/validate_release.py` | Automated changelog/version validation (runs in CI on version-bump PRs) |
 | `scripts/healthcheck.sh` | Post-deploy health check (systemd, version, logs, Bot API) |
+| `scripts/staging.sh` | Staging install helper (TestPyPI rc install, rollback, status) |
 | `cliff.toml` | git-cliff config for changelog drafting from conventional commits |
 | `.claude/rules/release-discipline.md` | Auto-loaded rule enforcing issue/changelog discipline |
 
 ## Release workflow phases
 
 ```
-1. Issue audit  →  2. Version decision  →  3. Changelog  →  4. Validate  →  5. Integration test  →  6. Tag & publish
+1. Issue audit  →  2. Version decision  →  3. Changelog  →  4. Validate  →  5. Integration test  →  6. Staging  →  7. Tag & publish
 ```
 
-All six phases happen in a single branch (typically `master` for patches, `feature/*` for minors). The CI release pipeline triggers on `v*` tags pushed to `master`.
+All seven phases happen in a single branch (typically `master` for patches, `feature/*` for minors). The CI release pipeline triggers on `v*` tags pushed to `master`.
 
 ## Phase 1: Issue audit
 
@@ -175,7 +176,7 @@ print(f'Version {v} matches changelog ✓')
 
 **NEVER skip this phase.** Run the structured integration test suite against `@untether_dev_bot` before tagging. See `docs/reference/integration-testing.md` for the full playbook.
 
-**NEVER test against `@hetz_lba1_bot` (production). ALWAYS use `@untether_dev_bot` (dev service).**
+**NEVER use `@hetz_lba1_bot` (staging) for initial dev testing. ALWAYS use `@untether_dev_bot` first.** Stage rc versions on `@hetz_lba1_bot` only after dev integration tests pass.
 
 ```bash
 # Restart dev bot to pick up latest code
@@ -241,7 +242,50 @@ All integration test tiers are fully automated by Claude Code via Telegram MCP t
 - [ ] No warnings/errors in logs: `journalctl --user -u untether-dev --since "1 hour ago" | grep -E "WARNING|ERROR"`
 - [ ] Upgrade path tested (minor/major): old config parses, state files survive restart
 
-## Phase 6: Tag and publish
+## Phase 6: Staging (recommended for minor+, optional for patches)
+
+Before tagging a final release, publish a release candidate to TestPyPI and dogfood it on `@hetz_lba1_bot` for ~1 week.
+
+### Enter staging
+
+```bash
+# Bump to rc version (no changelog entry needed)
+# Edit pyproject.toml: version = "X.Y.Zrc1"
+uv lock
+git add pyproject.toml uv.lock
+git commit -m "chore: staging X.Y.Zrc1"
+git push origin master
+
+# Wait for CI to publish to TestPyPI, then install
+scripts/staging.sh install X.Y.Zrc1
+systemctl --user restart untether
+scripts/healthcheck.sh --version X.Y.Zrc1
+```
+
+### During staging
+
+- Dogfood with all chat routes on `@hetz_lba1_bot` for ~1 week
+- The issue watcher catches bugs automatically (monitors the same service)
+- If bugs found: fix → bump to `X.Y.Zrc2` → push → install
+
+### Promote to release
+
+When staging is stable, proceed to Phase 7 (Tag and publish) with the final version.
+
+### Rollback
+
+```bash
+scripts/staging.sh rollback     # Reverts to last stable PyPI version
+systemctl --user restart untether
+```
+
+### Conventions
+
+- rc versions are **NOT** git-tagged (avoids triggering `release.yml`)
+- rc versions do **NOT** require changelog entries (`validate_release.py` skips them)
+- Commit message: `chore: staging X.Y.ZrcN`
+
+## Phase 7: Tag and publish
 
 ```bash
 # Commit release changes (version bump, changelog, lockfile)

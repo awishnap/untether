@@ -55,4 +55,4 @@ Messages that should auto-delete when a run finishes:
 
 If this change will be released, run integration tests T1-T10 (Telegram transport), S7 (rapid-fire), S8 (long prompt) via `@untether_dev_bot`. See `docs/reference/integration-testing.md` — the "Changed area" table maps `telegram/*.py` changes to required tests.
 
-**NEVER test against `@hetz_lba1_bot` (production). ALWAYS use `@untether_dev_bot` (dev service).**
+**NEVER use `@hetz_lba1_bot` (staging) for initial dev testing. ALWAYS use `@untether_dev_bot` first.** Stage rc versions on `@hetz_lba1_bot` only after dev integration tests pass.

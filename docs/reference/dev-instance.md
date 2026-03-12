@@ -1,10 +1,10 @@
 # Dev Instance
 
-Untether runs two isolated instances on lba-1: **production** (PyPI release) and **dev** (local editable source). They use separate Telegram bots, separate configs, and separate state — zero crosstalk.
+Untether runs two isolated instances on lba-1: **staging** (PyPI/TestPyPI release) and **dev** (local editable source). They use separate Telegram bots, separate configs, and separate state — zero crosstalk.
 
 ## How it works
 
-| | Production | Dev |
+| | Staging | Dev |
 |---|---|---|
 | **Systemd service** | `untether.service` | `untether-dev.service` |
 | **Binary** | `~/.local/bin/untether` (pipx, PyPI wheel) | `/home/nathan/untether/.venv/bin/untether` (editable) |
@@ -12,7 +12,7 @@ Untether runs two isolated instances on lba-1: **production** (PyPI release) and
 | **State files** | `~/.untether/*.json` | `~/.untether-dev/*.json` |
 | **Lock file** | `~/.untether/untether.toml.lock` | `~/.untether-dev/untether.toml.lock` |
 | **Telegram bot** | `@hetz_lba1_bot` | `@untether_dev_bot` |
-| **Source** | Frozen PyPI release | Whatever's in `/home/nathan/untether/src/` |
+| **Source** | PyPI release or TestPyPI rc | Whatever's in `/home/nathan/untether/src/` |
 
 The `UNTETHER_CONFIG_PATH` env var (set in the dev systemd unit) is what directs the dev instance to its own config directory. State and lock files derive their paths from the config file location automatically.
 
@@ -20,7 +20,7 @@ The `UNTETHER_CONFIG_PATH` env var (set in the dev systemd unit) is what directs
 
 The dev instance doesn't need its own branch or repo. The separation is at the **runtime** level, not the source level:
 
-- **Production** runs a frozen PyPI wheel — changing local source has zero effect on it
+- **Staging** runs a PyPI/TestPyPI wheel — changing local source has zero effect on it
 - **Dev** runs the local editable install — any code change takes effect on `systemctl --user restart untether-dev`
 - You develop on whatever branch you like (master, feature branches, etc.)
 - The `~/.untether-dev/` config directory is local infrastructure, not versioned in git
@@ -33,25 +33,23 @@ systemctl --user restart untether-dev     # Pick up code changes
 systemctl --user stop untether-dev
 journalctl --user -u untether-dev -f      # Tail dev logs
 
-# --- Production instance ---
-systemctl --user restart untether         # Restart (same PyPI version)
-journalctl --user -u untether -f          # Tail prod logs
+# --- Staging instance ---
+systemctl --user restart untether         # Restart (same wheel version)
+journalctl --user -u untether -f          # Tail staging logs
 
-# --- Upgrade production after a PyPI release ---
-# Option A: graceful (waits for active runs to finish)
-# Send /restart in Telegram, wait for drain, then:
-uv tool upgrade untether       # or: pipx upgrade untether
+# --- Staging: install rc from TestPyPI ---
+scripts/staging.sh install X.Y.ZrcN
 systemctl --user restart untether
 
-# Option B: immediate (interrupts active runs)
-uv tool upgrade untether       # or: pipx upgrade untether
+# --- Staging: upgrade after PyPI release ---
+scripts/staging.sh reset       # or: pipx upgrade untether
 systemctl --user restart untether
 
 # --- Check both ---
 systemctl --user status untether untether-dev
 
 # --- Versions ---
-/home/nathan/.local/bin/untether --version          # Production (PyPI)
+/home/nathan/.local/bin/untether --version          # Staging (PyPI/TestPyPI)
 /home/nathan/untether/.venv/bin/untether --version   # Dev (local)
 ```
 
@@ -61,8 +59,72 @@ systemctl --user status untether untether-dev
 2. `systemctl --user restart untether-dev`
 3. Test via `@untether_dev_bot` in Telegram
 4. Run tests: `uv run pytest`
-5. When satisfied: commit, push, release to PyPI
-6. Upgrade production: `uv tool upgrade untether && systemctl --user restart untether`
+5. When satisfied: commit, push, enter staging
+
+## Staging workflow
+
+After dev testing passes, release candidates go through a staging phase on `@hetz_lba1_bot` before publishing to PyPI. This catches bugs through real-world dogfooding with all chat routes.
+
+```
+Dev (local editable)     Staging (TestPyPI rc)           Release (PyPI)
+@untether_dev_bot        @hetz_lba1_bot                  (staging bot)
+
+Fix bugs, test locally   Bump to 0.35.0rc1               Bump to 0.35.0
+Integration tests        Push master → TestPyPI          Changelog + tag v0.35.0
+                         staging.sh install 0.35.0rc1     release.yml → PyPI
+                         Dogfood ~1 week                  staging.sh reset → restart
+                         Issue watcher catches bugs
+                         Fix → 0.35.0rc2 if needed
+```
+
+### Enter staging
+
+1. Bump version in `pyproject.toml` to `X.Y.Zrc1` (no changelog entry needed)
+2. Run `uv lock` to sync lockfile
+3. Commit: `chore: staging X.Y.Zrc1`
+4. Push to `master` — CI auto-publishes to TestPyPI
+5. Wait for CI to pass
+6. Install on staging bot:
+   ```bash
+   scripts/staging.sh install X.Y.Zrc1
+   systemctl --user restart untether
+   scripts/healthcheck.sh --version X.Y.Zrc1
+   ```
+
+### Fix bugs during staging
+
+1. Fix on a branch, merge to master
+2. Bump to `X.Y.Zrc2`, run `uv lock`
+3. Commit: `chore: staging X.Y.Zrc2`
+4. Push → CI publishes to TestPyPI
+5. `scripts/staging.sh install X.Y.Zrc2 && systemctl --user restart untether`
+
+### Promote to release
+
+1. Bump to `X.Y.Z` in `pyproject.toml`
+2. Add full changelog entry covering all changes since last stable release
+3. Run `uv lock`, commit, tag `vX.Y.Z`, push with tags
+4. `release.yml` publishes to PyPI
+5. `scripts/staging.sh reset && systemctl --user restart untether`
+
+### Rollback from staging
+
+If a staging rc is too broken:
+
+```bash
+scripts/staging.sh rollback
+systemctl --user restart untether
+```
+
+This reinstalls the last stable PyPI version.
+
+### Conventions
+
+- **rc versions are NOT git-tagged** — avoids triggering `release.yml`
+- **No changelog for rc** — changelog is written once for the final release
+- **Commit message**: `chore: staging X.Y.ZrcN`
+- **Issue watcher** works identically during staging (monitors the same staging service)
+- **`validate_release.py`** skips changelog validation for pre-release versions
 
 ## Config files
 

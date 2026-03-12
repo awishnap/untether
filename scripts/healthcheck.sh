@@ -8,7 +8,7 @@
 #   4. Bot is alive (Telegram Bot API getMe)
 #
 # Usage:
-#   healthcheck.sh                    # check production
+#   healthcheck.sh                    # check staging
 #   healthcheck.sh --dev              # check dev instance
 #   healthcheck.sh --version 0.35.0   # verify specific version
 #
@@ -64,7 +64,7 @@ fi
 
 # 3. Version check
 if [[ -n "$EXPECTED_VERSION" ]]; then
-    INSTALLED_VERSION=$(untether --version 2>/dev/null | grep -oP '[\d.]+' | head -1 || echo "unknown")
+    INSTALLED_VERSION=$(untether --version 2>/dev/null | grep -oP '[\d.]+[a-z0-9]*' | head -1 || echo "unknown")
     if [[ "$INSTALLED_VERSION" == "$EXPECTED_VERSION" ]]; then
         pass "version matches: $INSTALLED_VERSION"
     else

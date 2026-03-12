@@ -120,7 +120,7 @@ Project hooks in `.claude/hooks.json` fire automatically:
 
 | Hook | Trigger | What it does |
 |------|---------|-------------|
-| dev-workflow-guard | `systemctl` with `untether` | Blocks production restarts during dev; guides to `untether-dev`; allows `pipx upgrade` path |
+| dev-workflow-guard | `systemctl` with `untether` | Blocks staging restarts during dev; guides to `untether-dev`; allows `staging.sh`/`pipx upgrade` path |
 | runner-edit-context | Edit/Write to `runners/*.py` | 3-event contract, PTY lifecycle, test/doc reminders |
 | schema-edit-context | Edit/Write to `schemas/*.py` | msgspec impact on parsing, fixture updates |
 | telegram-edit-context | Edit/Write to `telegram/*.py` | Outbox model, callback_data limits, early answering |
@@ -137,7 +137,7 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 | `control-channel.md` | `runners/claude.py`, `claude_control.py` | PTY lifecycle, session registries, cooldown mechanics |
 | `testing-conventions.md` | `tests/**` | pytest+anyio, stub patterns, 80% coverage threshold |
 | `release-discipline.md` | `CHANGELOG.md`, `pyproject.toml` | GitHub issue linking, changelog format, semantic versioning |
-| `dev-workflow.md` | `src/untether/**` | Dev vs production separation, never restart production for testing, always use untether-dev |
+| `dev-workflow.md` | `src/untether/**` | Dev vs staging separation, never restart staging for testing, always use untether-dev |
 
 ## Tests
 
@@ -170,21 +170,29 @@ Key test files:
 
 ## Development
 
-Two instances run on lba-1 — production (PyPI release) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref. See `docs/reference/integration-testing.md` for the structured integration test playbook run against `@untether_dev_bot` before every release. All integration test tiers are fully automated by Claude Code via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`, `send_voice`, `send_file`) and Bash (`journalctl`, `kill -TERM`, FD/zombie checks).
+Two instances run on lba-1 — staging (PyPI/TestPyPI) and dev (local editable source). See `docs/reference/dev-instance.md` for full quickref including the staging workflow. See `docs/reference/integration-testing.md` for the structured integration test playbook run against `@untether_dev_bot` before every release. All integration test tiers are fully automated by Claude Code via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`, `send_voice`, `send_file`) and Bash (`journalctl`, `kill -TERM`, FD/zombie checks).
 
-| | Production (`@hetz_lba1_bot`) | Dev (`@untether_dev_bot`) |
+| | Staging (`@hetz_lba1_bot`) | Dev (`@untether_dev_bot`) |
 |---|---|---|
 | **Service** | `untether.service` | `untether-dev.service` |
 | **Binary** | `~/.local/bin/untether` (pipx) | `.venv/bin/untether` (editable) |
 | **Config** | `~/.untether/untether.toml` | `~/.untether-dev/untether.toml` |
-| **Source** | Frozen PyPI release | Local `/home/nathan/untether/src/` |
+| **Source** | PyPI release or TestPyPI rc | Local `/home/nathan/untether/src/` |
 
-### Dev/production separation (CRITICAL)
+### 3-phase release workflow (MANDATORY)
 
-- **NEVER restart `untether.service` (production)** to test local code changes. Production runs a frozen PyPI wheel — local edits have no effect on it. Restarting production during development is always wrong.
+1. **Dev** — fix code, run unit tests, test via `@untether_dev_bot` (6 engine chats), run integration tests
+2. **Staging** — bump to `X.Y.ZrcN`, push master → CI publishes to TestPyPI, install on `@hetz_lba1_bot` via `scripts/staging.sh`, dogfood for 1+ week
+3. **Release** — bump to `X.Y.Z`, write changelog, tag `vX.Y.Z`, push — `release.yml` publishes to PyPI
+
+**NEVER skip staging for minor/major releases. NEVER go directly from dev to PyPI tagging.**
+
+### Dev/staging separation (CRITICAL)
+
+- **NEVER restart `untether.service` (staging)** to test local code changes. Staging runs a PyPI/TestPyPI wheel — local edits have no effect on it. Restarting staging during development is always wrong.
 - **ALWAYS use `untether-dev.service`** for testing. It runs the local editable source.
-- **ALWAYS test via `@untether_dev_bot`** before merging/releasing. Production (`@hetz_lba1_bot`) must only run publicly released PyPI versions.
-- Production is only restarted after `pipx upgrade untether` following a PyPI release.
+- **ALWAYS test via `@untether_dev_bot`** before merging/releasing. Staging (`@hetz_lba1_bot`) runs released wheels only.
+- Staging is restarted after `scripts/staging.sh install` (TestPyPI rc) or `pipx upgrade untether` (PyPI release).
 
 See `.claude/rules/dev-workflow.md` for full rules.
 
@@ -193,9 +201,12 @@ See `.claude/rules/dev-workflow.md` for full rules.
 systemctl --user restart untether-dev
 journalctl --user -u untether-dev -f
 
-# Promote to production (only after PyPI release)
-# For graceful upgrade: send /restart in Telegram first, wait for drain
-pipx upgrade untether && systemctl --user restart untether
+# Staging: install rc from TestPyPI for dogfooding
+scripts/staging.sh install X.Y.ZrcN
+systemctl --user restart untether
+
+# Promote to stable (only after PyPI release)
+scripts/staging.sh reset && systemctl --user restart untether
 
 # Tests / lint
 uv run pytest

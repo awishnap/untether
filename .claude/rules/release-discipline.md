@@ -32,9 +32,19 @@
 
 **NEVER skip integration testing.** Unit tests alone are insufficient — production bugs consistently slip through areas only exercisable via live Telegram interaction.
 
-**ALWAYS use `@untether_dev_bot`** (dev service) for integration testing. NEVER test against `@hetz_lba1_bot` (production).
+**ALWAYS use `@untether_dev_bot`** (dev service) for initial integration testing. NEVER use `@hetz_lba1_bot` (staging) for dev testing — use `@untether_dev_bot` first. Stage rc versions on `@hetz_lba1_bot` only after dev integration tests pass.
 
 Integration tests are automated via Telegram MCP tools (`send_message`, `get_history`, `list_inline_buttons`, `press_inline_button`, `reply_to_message`). Claude Code sends test prompts to the 6 `ut-dev:` engine chats, reads back responses, and verifies expected behaviour. See `docs/reference/integration-testing.md` for chat IDs, workflow, and test details.
+
+## Staging / rc versions
+
+Pre-release versions (`X.Y.ZrcN`) are used for staging on `@hetz_lba1_bot` before final release:
+
+- rc versions do **NOT** require changelog entries — `validate_release.py` skips them
+- rc versions are **NOT** git-tagged — no `v0.35.0rc1` tags (avoids triggering `release.yml`)
+- Commit message convention: `chore: staging X.Y.ZrcN`
+- Only final releases (`X.Y.Z`) get tagged and changelog entries
+- See `docs/reference/dev-instance.md` for the full staging workflow
 
 ## Changelog format
 

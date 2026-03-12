@@ -58,7 +58,7 @@ Unit tests cover code paths but NOT live Telegram interaction. Before every vers
 - **Minor**: Tier 7 + Tier 1 (all 6 engines) + Tier 2 (Claude interactive) + relevant Tier 3-4 + Tier 6 + upgrade path
 - **Major**: ALL tiers (1-7), ALL engines, full upgrade path
 
-**NEVER use `@hetz_lba1_bot` (production) for testing. ALWAYS use `@untether_dev_bot` (dev service).**
+**NEVER use `@hetz_lba1_bot` (staging) for initial dev testing. ALWAYS use `@untether_dev_bot` first.** Stage rc versions on `@hetz_lba1_bot` only after dev integration tests pass.
 
 ## Integration testing via Telegram MCP
 

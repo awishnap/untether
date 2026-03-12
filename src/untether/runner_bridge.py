@@ -622,6 +622,14 @@ class ProgressEdits:
                 else None
             )
 
+            # Compute CPU activity before updating _prev_diag (needs both
+            # the previous and current snapshots to compare ticks).
+            cpu_active = (
+                is_cpu_active(self._prev_diag, diag)
+                if self._prev_diag and diag
+                else None
+            )
+
             logger.warning(
                 "progress_edits.stall_detected",
                 channel_id=self.channel_id,
@@ -637,11 +645,7 @@ class ProgressEdits:
                 tcp_total=diag.tcp_total if diag else None,
                 rss_kb=diag.rss_kb if diag else None,
                 fd_count=diag.fd_count if diag else None,
-                cpu_active=(
-                    is_cpu_active(self._prev_diag, diag)
-                    if self._prev_diag and diag
-                    else None
-                ),
+                cpu_active=cpu_active,
                 recent_events=[(round(t, 1), lbl) for t, lbl in recent[-5:]],
                 stderr_hint=stderr_hint,
             )
@@ -658,7 +662,19 @@ class ProgressEdits:
             ):
                 auto_cancel_reason = "no_pid_no_events"
             elif self._stall_warn_count >= self._STALL_MAX_WARNINGS:
-                auto_cancel_reason = "max_warnings"
+                # Suppress auto-cancel when process is actively working
+                # (CPU ticks incrementing between diagnostic snapshots).
+                # Extended thinking phases produce no JSONL events but the
+                # process is alive and busy — killing it is a false positive.
+                if cpu_active is True:
+                    logger.info(
+                        "progress_edits.stall_suppressed_by_activity",
+                        channel_id=self.channel_id,
+                        stall_warn_count=self._stall_warn_count,
+                        pid=self.pid,
+                    )
+                else:
+                    auto_cancel_reason = "max_warnings"
 
             if auto_cancel_reason is not None:
                 logger.warning(

@@ -22,6 +22,7 @@ from pathlib import Path
 
 REPO_URL = "https://github.com/littlebearapps/untether"
 ALLOWED_SUBSECTIONS = {"fixes", "changes", "breaking", "docs", "tests"}
+PRERELEASE_RE = re.compile(r"(a|b|rc|dev)\d*$")
 
 # Patterns
 VERSION_HEADING = re.compile(r"^## v(\S+) \((\d{4}-\d{2}-\d{2})\)")
@@ -109,6 +110,12 @@ def main() -> int:
     # 1. Load version
     version = load_version()
     print(f"Version: {version}")
+
+    # Pre-release versions (rc, alpha, beta, dev) skip changelog validation.
+    # Changelog is only required for final releases.
+    if PRERELEASE_RE.search(version):
+        print("Pre-release version — skipping changelog validation")
+        return 0
 
     # 2. Find matching changelog section
     changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
