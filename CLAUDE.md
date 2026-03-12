@@ -10,7 +10,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 ## Features (vs upstream takopi)
 
 - **Interactive permission control** — bidirectional Telegram buttons for tool approval, plan mode, and clarifying questions
-- **Pause & Outline Plan** — third button on plan approval; after Claude writes the outline, Approve/Deny buttons appear automatically (no need to type "approved")
+- **Pause & Outline Plan** — third button on plan approval; after Claude writes the outline, Approve/Deny buttons appear automatically (hold-open keeps session alive while user reads)
 - **Agent context preamble** — configurable prompt preamble tells agents they're on Telegram and requests structured end-of-task summaries; `[preamble]` config section
 - **`/planmode`** — toggle permission mode per chat (on/off/auto)
 - **Ask mode** — interactive AskUserQuestion with option buttons, sequential multi-question flows, and `/config` toggle; Claude-only
@@ -30,7 +30,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 - **`/config`** — inline settings menu with navigable sub-pages; toggle plan mode, ask mode, verbose, engine, trigger via buttons
 - **`[progress]` config** — global verbosity and max_actions settings in `untether.toml`
 - **Pi context compaction** — `AutoCompactionStart`/`AutoCompactionEnd` events rendered as progress actions
-- **Stall diagnostics & liveness watchdog** — `/proc` process diagnostics (CPU, RSS, TCP, FDs), progressive stall warnings with Telegram notifications, liveness watchdog for alive-but-silent subprocesses, stall auto-cancel (dead process, no-PID zombie, absolute cap), `session.summary` structured log; `[watchdog]` config section
+- **Stall diagnostics & liveness watchdog** — `/proc` process diagnostics (CPU, RSS, TCP, FDs), progressive stall warnings with Telegram notifications, liveness watchdog for alive-but-silent subprocesses, stall auto-cancel (dead process, no-PID zombie, absolute cap) with CPU-active suppression, `session.summary` structured log; `[watchdog]` config section
 
 See `.claude/skills/claude-stream-json/` and `.claude/rules/control-channel.md` for implementation details.
 
@@ -141,13 +141,13 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 
 ## Tests
 
-1548 unit tests, 80% coverage threshold. Integration testing against `@untether_dev_bot` is **mandatory before every release** — see `docs/reference/integration-testing.md` for the full playbook with per-release-type tier requirements (patch/minor/major). All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash.
+1553 unit tests, 80% coverage threshold. Integration testing against `@untether_dev_bot` is **mandatory before every release** — see `docs/reference/integration-testing.md` for the full playbook with per-release-type tier requirements (patch/minor/major). All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash.
 
 Key test files:
 
 - `test_claude_control.py` — 82 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
 - `test_callback_dispatch.py` — 25 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
-- `test_exec_bridge.py` — 85 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel, approval-aware stall threshold, session summary, PID/stream threading
+- `test_exec_bridge.py` — 87 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel with CPU-active suppression, approval-aware stall threshold, session summary, PID/stream threading
 - `test_ask_user_question.py` — 25 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
 - `test_diff_preview.py` — 14 tests: Edit diff display, Write content preview, Bash command display, line/char truncation
 - `test_cost_tracker.py` — 12 tests: cost accumulation, per-run/daily budget thresholds, warning levels, daily reset, auto-cancel flag
@@ -158,7 +158,7 @@ Key test files:
 - `test_shutdown.py` — 4 tests: shutdown state transitions, idempotency, reset
 - `test_preamble.py` — 5 tests: default preamble injection, disabled preamble, custom text override, empty text disables, settings defaults
 - `test_restart_command.py` — 3 tests: command triggers shutdown, idempotent response, command id
-- `test_cooldown_bypass.py` — 17 tests: outline bypass, rapid retry auto-deny, no-text auto-deny, cooldown escalation
+- `test_cooldown_bypass.py` — 19 tests: outline bypass, rapid retry auto-deny, no-text auto-deny, cooldown escalation, hold-open outline flow
 - `test_verbose_progress.py` — 21 tests: format_verbose_detail() for each tool type, MarkdownFormatter verbose mode, compact regression
 - `test_verbose_command.py` — 7 tests: /verbose toggle on/off/clear, backend id
 - `test_config_command.py` — 181 tests: home page, plan mode/ask mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility
