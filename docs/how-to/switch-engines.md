@@ -24,6 +24,8 @@ Directives are only parsed at the start of the first non-empty line.
 
     🏷 codex
 
+<img src="../assets/screenshots/multi-engine-switch.jpg" alt="Engine switching — Codex and Claude used in the same chat" width="360" loading="lazy" />
+
 ## Set a default engine for the current scope
 
 Use `/agent`:

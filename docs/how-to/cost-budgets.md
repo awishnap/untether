@@ -52,6 +52,8 @@ When `auto_cancel = true` and a budget is exceeded, Untether cancels the run aut
 !!! untether "Untether"
     ⚠️ **cost warning** — run cost $1.45 is 73% of $2.00 per-run budget
 
+<img src="../assets/screenshots/cost-warning-alert.jpg" alt="Cost warning alert showing budget threshold exceeded" width="360" loading="lazy" />
+
 ### Daily reset
 
 The daily cost counter resets at midnight (local time, based on the server clock). Each new day starts from zero.
@@ -81,6 +83,8 @@ The `/usage` command reads your Claude Code OAuth credentials to fetch live data
 
     sonnet: 38% · opus: 4%<br>
     extra credits: $0.00
+
+<img src="../assets/screenshots/usage-command.jpg" alt="/usage command output showing 5h window, weekly usage, and per-model breakdown" width="360" loading="lazy" />
 
 ## Subscription usage footer
 

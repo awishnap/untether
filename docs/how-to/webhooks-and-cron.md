@@ -53,6 +53,9 @@ Webhooks accept HTTP POST requests and turn them into agent runs. Example: trigg
 5. The rendered prompt is sent to Claude Code in the `myapp` project
 6. A notification appears in your Telegram chat, and the run streams progress as usual
 
+<!-- TODO: capture screenshot -->
+<!-- <img src="../assets/screenshots/webhook-notification.jpg" alt="Webhook-triggered run with rendered prompt and agent progress" width="360" loading="lazy" /> -->
+
 ### Authentication
 
 Every webhook requires explicit auth. Choose one:

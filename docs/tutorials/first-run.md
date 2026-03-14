@@ -56,6 +56,8 @@ As the agent calls tools and makes progress, you'll see updates like:
 
 The progress message is edited in-place.
 
+<img src="../assets/screenshots/progress-streaming.jpg" alt="Progress message streaming in Telegram with action list" width="360" loading="lazy" />
+
 ## 4. See the final answer
 
 When the agent finishes, Untether sends a new message and replaces the progress message, so you get a notification.
@@ -69,7 +71,9 @@ When the agent finishes, Untether sends a new message and replaces the progress 
     `codex resume 019bb89b-1b0b-7e90-96e4-c33181b49714`
 
 
-That last line is the **resume line**—it's how Untether knows which conversation to continue.
+<img src="../assets/screenshots/final-answer-footer.jpg" alt="Final answer with model/cost footer and resume line" width="360" loading="lazy" />
+
+The footer shows which engine, model, and mode were used, plus cost if available. When resume lines are enabled, a line like `codex resume abc123` appears too—that's how Untether knows which conversation to continue.
 
 ## 5. Continue the conversation
 
@@ -112,6 +116,8 @@ While the progress message is showing, tap the **cancel** button or reply to it 
         /cancel
 
 Untether sends `SIGTERM` to the agent process and posts a cancelled status:
+
+<img src="../assets/screenshots/cancel-button.jpg" alt="Cancel button on progress message and the resulting cancelled status" width="360" loading="lazy" />
 
 !!! failure ""
     cancelled · codex · 12s

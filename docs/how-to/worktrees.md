@@ -39,6 +39,9 @@ Send a message like:
 
     dir: happy-gadgets @feat/memory-box
 
+<!-- TODO: capture screenshot -->
+<!-- <img src="../assets/screenshots/worktree-run.jpg" alt="Worktree run with @branch directive and project context in footer" width="360" loading="lazy" /> -->
+
 ## Ignore `.worktrees/` in git status
 
 If you use the default `.worktrees/` directory inside the repo, add it to a gitignore.

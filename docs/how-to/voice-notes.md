@@ -48,6 +48,8 @@ If transcription fails, you’ll get an error message and the run is skipped.
 
     ▸ Read `src/upload.py`
 
+<img src="../assets/screenshots/voice-transcription.jpg" alt="Voice note followed by transcribed text and agent run output" width="360" loading="lazy" />
+
 ## Related
 
 - [Config reference](../reference/config.md)

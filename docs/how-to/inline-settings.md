@@ -27,6 +27,8 @@ Trigger: all
 [  Engine   ] [ Trigger  ]
 ```
 
+<img src="../assets/screenshots/config-menu.jpg" alt="/config home page with inline keyboard buttons for settings" width="360" loading="lazy" />
+
 !!! note "Gemini CLI"
     When the engine is Gemini CLI, the home page shows **Approval mode** (read-only / full access) instead of Plan mode, Ask mode, and Diff preview.
 

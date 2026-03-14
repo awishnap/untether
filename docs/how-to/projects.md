@@ -13,6 +13,9 @@ untether init happy-gadgets
 saved project 'happy-gadgets' to ~/.untether/untether.toml
 ```
 
+<!-- TODO: capture screenshot -->
+<!-- <img src="../assets/screenshots/project-init.jpg" alt="Terminal output of untether init showing project registration" width="360" loading="lazy" /> -->
+
 This adds a project to your config:
 
 === "untether config"

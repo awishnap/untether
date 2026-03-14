@@ -22,6 +22,9 @@ $ untether doctor
 ✓ file transfer directory exists
 ```
 
+<!-- TODO: capture screenshot -->
+<!-- <img src="../assets/screenshots/doctor-output.jpg" alt="untether doctor output showing check results" width="360" loading="lazy" /> -->
+
 ## Bot not responding
 
 **Symptoms:** You send a message but the bot doesn't reply at all.
@@ -278,6 +281,9 @@ $ untether doctor
 ✓ file transfer directory exists
 all checks passed
 ```
+
+<!-- TODO: capture screenshot -->
+<!-- <img src="../assets/screenshots/doctor-all-passing.jpg" alt="untether doctor with all checks passing" width="360" loading="lazy" /> -->
 
 ## Checking logs
 

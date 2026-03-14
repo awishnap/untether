@@ -35,6 +35,8 @@ With `session_mode = "chat"`, new messages in the chat continue the current thre
 !!! user "You"
     now add rate limiting to it
 
+<img src="../assets/screenshots/chat-auto-resume.jpg" alt="Follow-up message auto-resuming the previous session without a reply" width="360" loading="lazy" />
+
 The second message automatically continues the same session — no reply needed.
 
 ## Reset a session
