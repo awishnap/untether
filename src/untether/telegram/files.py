@@ -8,6 +8,10 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 
+from ..logging import get_logger
+
+logger = get_logger(__name__)
+
 __all__ = [
     "ZipTooLargeError",
     "deduplicate_target",
@@ -145,8 +149,13 @@ def deduplicate_target(target: Path) -> Path:
     for i in range(1, 1000):
         candidate = parent / f"{stem}_{i}{suffix}"
         if not candidate.exists():
+            logger.info(
+                "file.deduplicate",
+                original=str(target),
+                renamed=str(candidate),
+            )
             return candidate
-    return target  # give up after 999 — let the caller handle it
+    raise FileExistsError(f"no available deduplicated path for {target}")
 
 
 def write_bytes_atomic(path: Path, payload: bytes) -> None:
@@ -186,8 +195,20 @@ def zip_directory(
                     continue
                 archive.write(item, arcname=rel_item.as_posix())
                 if max_bytes is not None and buffer.tell() > max_bytes:
+                    logger.debug(
+                        "file.zip_too_large",
+                        max_bytes=max_bytes,
+                        actual_bytes=buffer.tell(),
+                        path=str(rel_path),
+                    )
                     raise ZipTooLargeError()
     payload = buffer.getvalue()
     if max_bytes is not None and len(payload) > max_bytes:
+        logger.debug(
+            "file.zip_too_large",
+            max_bytes=max_bytes,
+            actual_bytes=len(payload),
+            path=str(rel_path),
+        )
         raise ZipTooLargeError()
     return payload

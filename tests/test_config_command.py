@@ -209,14 +209,15 @@ class TestHomePage:
         assert "config:pm" in _buttons_data(msg)
 
     @pytest.mark.anyio
-    async def test_home_hides_plan_mode_when_not_claude(self, tmp_path):
-        """Plan mode label and button hidden when engine is not claude."""
+    async def test_home_hides_plan_mode_when_not_supported(self, tmp_path):
+        """Plan mode label and button hidden for unsupported engines."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
-        ctx = _make_ctx(config_path=state_path, default_engine="codex")
+        ctx = _make_ctx(config_path=state_path, default_engine="opencode")
         await cmd.handle(ctx)
         msg = _last_send_msg(ctx)
         assert "Plan mode" not in msg.text
+        assert "Approval" not in msg.text
         assert "config:pm" not in _buttons_data(msg)
 
     @pytest.mark.anyio
@@ -242,11 +243,11 @@ class TestHomePage:
         assert "config:dp" in data
 
     @pytest.mark.anyio
-    async def test_home_has_nav_buttons_non_claude(self, tmp_path):
-        """When engine is not claude, 3 nav buttons (no plan mode)."""
+    async def test_home_has_nav_buttons_non_permission_engine(self, tmp_path):
+        """When engine has no permission support, no pm button."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
-        ctx = _make_ctx(config_path=state_path, default_engine="codex")
+        ctx = _make_ctx(config_path=state_path, default_engine="opencode")
         await cmd.handle(ctx)
         data = _buttons_data(_last_send_msg(ctx))
         assert "config:pm" not in data
@@ -363,11 +364,11 @@ class TestPlanMode:
             args_text="pm",
             text="config:pm",
             config_path=state_path,
-            default_engine="codex",
+            default_engine="opencode",
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Only available for Claude Code and Gemini CLI" in msg.text
+        assert "Only available for" in msg.text
         assert "config:home" in _buttons_data(msg)
 
     @pytest.mark.anyio
@@ -388,7 +389,95 @@ class TestPlanMode:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Only available for Claude Code and Gemini CLI" in msg.text
+        assert "Only available for" in msg.text
+
+
+# ---------------------------------------------------------------------------
+# Codex approval policy (via plan mode page)
+# ---------------------------------------------------------------------------
+
+
+class TestCodexApprovalPolicy:
+    @pytest.mark.anyio
+    async def test_approval_policy_page_renders(self, tmp_path):
+        """Navigating to pm page with codex engine shows approval policy."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="codex",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Approval policy" in msg.text
+        assert "full auto" in msg.text.lower()
+        data = _buttons_data(msg)
+        assert "config:pm:fa" in data
+        assert "config:pm:safe" in data
+
+    @pytest.mark.anyio
+    async def test_set_safe_mode(self, tmp_path):
+        """Setting safe mode stores permission_mode='safe'."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:safe",
+            text="config:pm:safe",
+            config_path=state_path,
+            default_engine="codex",
+        )
+        await cmd.handle(ctx)
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "codex")
+        assert override is not None
+        assert override.permission_mode == "safe"
+
+    @pytest.mark.anyio
+    async def test_set_full_auto_clears_permission(self, tmp_path):
+        """Setting full auto clears permission_mode."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        await prefs.set_engine_override(
+            123, "codex", EngineOverrides(permission_mode="safe")
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:fa",
+            text="config:pm:fa",
+            config_path=state_path,
+            default_engine="codex",
+        )
+        await cmd.handle(ctx)
+        override = await prefs.get_engine_override(123, "codex")
+        # "full auto" maps to "auto" which clears to None
+        assert override is None or override.permission_mode is None
+
+    @pytest.mark.anyio
+    async def test_home_page_shows_codex_permission(self, tmp_path):
+        """Home page shows approval policy for codex engine."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "codex", EngineOverrides(permission_mode="safe")
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="codex")
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "safe" in msg.text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +500,7 @@ class TestGeminiApprovalMode:
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
         assert "Approval mode" in msg.text
-        assert "config:pm:fa" in _buttons_data(msg)
+        assert "config:pm:ya" in _buttons_data(msg)
         assert "config:pm:ro" in _buttons_data(msg)
 
     @pytest.mark.anyio
@@ -422,8 +511,8 @@ class TestGeminiApprovalMode:
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(
-            args_text="pm:fa",
-            text="config:pm:fa",
+            args_text="pm:ya",
+            text="config:pm:ya",
             config_path=state_path,
             default_engine="gemini",
         )
@@ -467,8 +556,8 @@ class TestGeminiApprovalMode:
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(
-            args_text="pm:fa",
-            text="config:pm:fa",
+            args_text="pm:ya",
+            text="config:pm:ya",
             config_path=state_path,
             default_engine="gemini",
         )
@@ -516,6 +605,60 @@ class TestGeminiApprovalMode:
         assert "full access" in msg.text.lower()
 
     @pytest.mark.anyio
+    async def test_set_auto_edit_stores_mode(self, tmp_path):
+        """Setting edit files stores 'auto_edit' as permission_mode."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm:ae",
+            text="config:pm:ae",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "gemini")
+        assert override is not None
+        assert override.permission_mode == "auto_edit"
+
+    @pytest.mark.anyio
+    async def test_home_shows_edit_files_label(self, tmp_path):
+        """Home page shows 'edit files' when auto_edit is set."""
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "prefs.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "gemini", EngineOverrides(permission_mode="auto_edit")
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="gemini")
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "edit files" in msg.text.lower()
+
+    @pytest.mark.anyio
+    async def test_approval_page_shows_three_options(self, tmp_path):
+        """Gemini approval page shows read-only, edit files, and full access."""
+        state_path = tmp_path / "prefs.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="pm",
+            text="config:pm",
+            config_path=state_path,
+            default_engine="gemini",
+        )
+        await cmd.handle(ctx)
+        data = _buttons_data(_last_edit_msg(ctx))
+        assert "config:pm:ro" in data
+        assert "config:pm:ae" in data
+        assert "config:pm:ya" in data
+
+    @pytest.mark.anyio
     async def test_approval_mode_has_back_button(self, tmp_path):
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
@@ -531,7 +674,10 @@ class TestGeminiApprovalMode:
 
 class TestGeminiApprovalModeToasts:
     def test_toast_full_access(self):
-        assert ConfigCommand.early_answer_toast("pm:fa") == "Approval mode: full access"
+        assert ConfigCommand.early_answer_toast("pm:ya") == "Approval mode: full access"
+
+    def test_toast_codex_full_auto(self):
+        assert ConfigCommand.early_answer_toast("pm:fa") == "Approval policy: full auto"
 
     def test_toast_read_only(self):
         assert ConfigCommand.early_answer_toast("pm:ro") == "Approval mode: read-only"
@@ -658,7 +804,7 @@ class TestEngine:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "current:" in msg.text.lower()
+        assert "engine:" in msg.text.lower()
 
     @pytest.mark.anyio
     async def test_engine_no_config_path(self):
@@ -827,10 +973,10 @@ class TestEngineAwareTransitions:
         """After switching engine away from claude, home page hides plan mode."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
-        # Start with claude, switch to codex
+        # Start with claude, switch to opencode (no permission mode)
         ctx = _make_ctx(
-            args_text="ag:codex",
-            text="config:ag:codex",
+            args_text="ag:opencode",
+            text="config:ag:opencode",
             config_path=state_path,
             default_engine="claude",
         )
@@ -898,9 +1044,10 @@ class TestProjectDefaultEngine:
         await cmd.handle(ctx)
         msg = _last_send_msg(ctx)
         assert "Engine: <b>codex</b>" in msg.text
-        # Claude Code-specific buttons hidden
+        # Claude Code-specific "Plan mode" label hidden; shows "Approval policy"
         assert "Plan mode" not in msg.text
-        assert "config:pm" not in _buttons_data(msg)
+        assert "Approval policy" in msg.text
+        assert "config:pm" in _buttons_data(msg)
 
     @pytest.mark.anyio
     async def test_home_project_default_shows_default_annotation(self, tmp_path):
@@ -958,15 +1105,15 @@ class TestProjectDefaultEngine:
             config_path=state_path,
             default_engine="claude",
         )
-        # Project default is codex — plan mode should be blocked
+        # Project default is opencode — permission mode should be blocked
         ctx.runtime.default_context_for_chat.return_value = RunContext(
-            project="codex-test"
+            project="opencode-test"
         )
-        ctx.runtime.project_default_engine.return_value = "codex"
+        ctx.runtime.project_default_engine.return_value = "opencode"
 
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Only available for Claude Code" in msg.text
+        assert "Only available for" in msg.text
 
     @pytest.mark.anyio
     async def test_engine_page_shows_effective_from_project(self, tmp_path):
@@ -988,7 +1135,7 @@ class TestProjectDefaultEngine:
 
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Current: <b>pi</b>" in msg.text
+        assert "Engine: <b>pi</b>" in msg.text
 
 
 # ---------------------------------------------------------------------------
@@ -1043,7 +1190,7 @@ class TestModel:
         assert "gpt-4.1-mini" in _last_edit_msg(ctx).text
 
     @pytest.mark.anyio
-    async def test_model_clear_returns_home(self, tmp_path):
+    async def test_model_clear_redirects_to_engine_page(self, tmp_path):
         from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
         from untether.telegram.engine_overrides import EngineOverrides
 
@@ -1062,7 +1209,7 @@ class TestModel:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "Settings" in msg.text  # Home page
+        assert "Engine & model" in msg.text  # Redirects to merged engine page
 
     @pytest.mark.anyio
     async def test_model_clear_removes_override(self, tmp_path):
@@ -1132,11 +1279,12 @@ class TestModel:
 
     @pytest.mark.anyio
     async def test_model_has_clear_button(self, tmp_path):
+        """Model page redirects to engine page which has a clear model button."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(args_text="md", text="config:md", config_path=state_path)
         await cmd.handle(ctx)
-        assert "config:md:clr" in _buttons_data(_last_edit_msg(ctx))
+        assert "config:ag:md_clr" in _buttons_data(_last_edit_msg(ctx))
 
     @pytest.mark.anyio
     async def test_home_shows_model_label(self, tmp_path):
@@ -1148,13 +1296,13 @@ class TestModel:
         assert "Model" in _last_send_msg(ctx).text
 
     @pytest.mark.anyio
-    async def test_home_shows_model_button(self, tmp_path):
-        """Model button always appears on home page."""
+    async def test_home_shows_engine_model_button(self, tmp_path):
+        """Engine & model button appears on home page (merged from separate buttons)."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(config_path=state_path)
         await cmd.handle(ctx)
-        assert "config:md" in _buttons_data(_last_send_msg(ctx))
+        assert "config:ag" in _buttons_data(_last_send_msg(ctx))
 
     @pytest.mark.anyio
     async def test_home_model_shows_override(self, tmp_path):
@@ -1511,8 +1659,9 @@ class TestAskQuestions:
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
         assert "Ask mode" in msg.text
+        # Toggle row: default off -> shows toggle-on button and clear
         assert "config:aq:on" in _buttons_data(msg)
-        assert "config:aq:off" in _buttons_data(msg)
+        assert "config:aq:clr" in _buttons_data(msg)
 
     @pytest.mark.anyio
     async def test_ask_questions_set_on(self, tmp_path):
@@ -1681,8 +1830,9 @@ class TestDiffPreview:
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
         assert "Diff preview" in msg.text
+        # Toggle row: default off -> shows toggle-on button and clear
         assert "config:dp:on" in _buttons_data(msg)
-        assert "config:dp:off" in _buttons_data(msg)
+        assert "config:dp:clr" in _buttons_data(msg)
 
     @pytest.mark.anyio
     async def test_diff_preview_set_on(self, tmp_path):
@@ -1889,7 +2039,7 @@ class TestDiffPreview:
 
     @pytest.mark.anyio
     async def test_diff_preview_checkmark_on(self, tmp_path):
-        """When diff_preview=True, On button has checkmark."""
+        """When diff_preview=True, toggle button shows checkmark."""
         from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
         from untether.telegram.engine_overrides import EngineOverrides
 
@@ -1909,7 +2059,7 @@ class TestDiffPreview:
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
         labels = _buttons_labels(msg)
-        assert "✓ On" in labels
+        assert "✓ Diff: on" in labels
 
     @pytest.mark.anyio
     async def test_diff_preview_default_label_on_page(self, tmp_path):
@@ -1961,7 +2111,8 @@ class TestCostUsage:
         assert "API cost" in msg.text
         assert "Subscription usage" in msg.text
         buttons = _buttons_data(msg)
-        assert "config:cu:ac_on" in buttons
+        # Toggle rows: cost default on -> shows off toggle; sub default off -> shows on toggle
+        assert "config:cu:ac_off" in buttons
         assert "config:cu:su_on" in buttons
 
     @pytest.mark.anyio
@@ -1980,7 +2131,8 @@ class TestCostUsage:
         assert "API cost" in msg.text
         assert "Subscription usage" not in msg.text
         buttons = _buttons_data(msg)
-        assert "config:cu:ac_on" in buttons
+        # Toggle row: cost default on -> shows off toggle; no sub row
+        assert "config:cu:ac_off" in buttons
         assert "config:cu:su_on" not in buttons
 
     @pytest.mark.anyio
@@ -2355,10 +2507,10 @@ class TestHomePageSections:
         assert "Claude Code" in text
 
     @pytest.mark.anyio
-    async def test_non_claude_home_no_agent_controls(self, tmp_path):
+    async def test_non_permission_engine_home_no_agent_controls(self, tmp_path):
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
-        ctx = _make_ctx(config_path=state_path, default_engine="codex")
+        ctx = _make_ctx(config_path=state_path, default_engine="opencode")
         await cmd.handle(ctx)
         text = _last_send_msg(ctx).text
         assert "Agent controls" not in text
@@ -2497,3 +2649,282 @@ class TestAboutPage:
         ctx = _make_ctx(args_text="ab", text="config:ab", config_path=state_path)
         await cmd.handle(ctx)
         assert "config:home" in _buttons_data(_last_edit_msg(ctx))
+
+
+# ---------------------------------------------------------------------------
+# Resume line toggle (#128)
+# ---------------------------------------------------------------------------
+
+
+class TestResumeLine:
+    @pytest.mark.anyio
+    async def test_resume_line_page_renders(self, tmp_path):
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="rl",
+            text="config:rl",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Resume line" in msg.text
+        data = _buttons_data(msg)
+        # Toggle row: shows on or off toggle (depending on config default) and clear
+        assert "config:rl:on" in data or "config:rl:off" in data
+        assert "config:rl:clr" in data
+
+    @pytest.mark.anyio
+    async def test_resume_line_set_on(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="rl:on",
+            text="config:rl:on",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Settings" in msg.text
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.show_resume_line is True
+
+    @pytest.mark.anyio
+    async def test_resume_line_set_off(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="rl:off",
+            text="config:rl:off",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.show_resume_line is False
+
+    @pytest.mark.anyio
+    async def test_resume_line_clear(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "state.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "claude", EngineOverrides(show_resume_line=True)
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="rl:clr",
+            text="config:rl:clr",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is None or override.show_resume_line is None
+
+    @pytest.mark.anyio
+    async def test_resume_line_shown_on_home(self, tmp_path):
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(config_path=state_path, default_engine="claude")
+        await cmd.handle(ctx)
+        msg = _last_send_msg(ctx)
+        assert "Resume line:" in msg.text
+        assert "config:rl" in _buttons_data(msg)
+
+    @pytest.mark.anyio
+    async def test_resume_line_no_config_path(self):
+        cmd = ConfigCommand()
+        ctx = _make_ctx(args_text="rl", text="config:rl", config_path=None)
+        await cmd.handle(ctx)
+        assert "Unavailable" in _last_edit_msg(ctx).text
+
+
+# ---------------------------------------------------------------------------
+# Resume line toasts
+# ---------------------------------------------------------------------------
+
+
+class TestResumeLineToasts:
+    def test_toast_rl_on(self):
+        assert ConfigCommand.early_answer_toast("rl:on") == "Resume line: on"
+
+    def test_toast_rl_off(self):
+        assert ConfigCommand.early_answer_toast("rl:off") == "Resume line: off"
+
+    def test_toast_rl_clr(self):
+        assert ConfigCommand.early_answer_toast("rl:clr") == "Resume line: cleared"
+
+    def test_toast_rl_nav(self):
+        assert ConfigCommand.early_answer_toast("rl") is None
+
+
+# ---------------------------------------------------------------------------
+# Budget settings (#129)
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetSettings:
+    @pytest.mark.anyio
+    async def test_budget_section_renders_on_cost_page(self, tmp_path):
+        """Navigate to cu page with claude engine, verify budget toggle rows."""
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu",
+            text="config:cu",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Budget" in msg.text
+        data = _buttons_data(msg)
+        # Toggle rows show one toggle + clear per row
+        assert "config:cu:bg_clr" in data
+        assert "config:cu:bc_clr" in data
+        # At least one of on/off per toggle
+        assert "config:cu:bg_on" in data or "config:cu:bg_off" in data
+        assert "config:cu:bc_on" in data or "config:cu:bc_off" in data
+
+    @pytest.mark.anyio
+    async def test_budget_toggle_on(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu:bg_on",
+            text="config:cu:bg_on",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+        msg = _last_edit_msg(ctx)
+        assert "Cost & usage" in msg.text
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.budget_enabled is True
+
+    @pytest.mark.anyio
+    async def test_budget_toggle_off(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu:bg_off",
+            text="config:cu:bg_off",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.budget_enabled is False
+
+    @pytest.mark.anyio
+    async def test_budget_clear(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+        from untether.telegram.engine_overrides import EngineOverrides
+
+        state_path = tmp_path / "state.json"
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        await prefs.set_engine_override(
+            123, "claude", EngineOverrides(budget_enabled=True)
+        )
+
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu:bg_clr",
+            text="config:cu:bg_clr",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is None or override.budget_enabled is None
+
+    @pytest.mark.anyio
+    async def test_auto_cancel_toggle_on(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu:bc_on",
+            text="config:cu:bc_on",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.budget_auto_cancel is True
+
+    @pytest.mark.anyio
+    async def test_auto_cancel_toggle_off(self, tmp_path):
+        from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+
+        state_path = tmp_path / "state.json"
+        cmd = ConfigCommand()
+        ctx = _make_ctx(
+            args_text="cu:bc_off",
+            text="config:cu:bc_off",
+            config_path=state_path,
+            default_engine="claude",
+        )
+        await cmd.handle(ctx)
+
+        prefs = ChatPrefsStore(resolve_prefs_path(state_path))
+        override = await prefs.get_engine_override(123, "claude")
+        assert override is not None
+        assert override.budget_auto_cancel is False
+
+
+# ---------------------------------------------------------------------------
+# Budget toasts
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetToasts:
+    def test_toast_bg_on(self):
+        assert ConfigCommand.early_answer_toast("cu:bg_on") == "Budget: on"
+
+    def test_toast_bg_off(self):
+        assert ConfigCommand.early_answer_toast("cu:bg_off") == "Budget: off"
+
+    def test_toast_bg_clr(self):
+        assert ConfigCommand.early_answer_toast("cu:bg_clr") == "Budget: cleared"
+
+    def test_toast_bc_on(self):
+        assert ConfigCommand.early_answer_toast("cu:bc_on") == "Auto-cancel: on"
+
+    def test_toast_bc_off(self):
+        assert ConfigCommand.early_answer_toast("cu:bc_off") == "Auto-cancel: off"
+
+    def test_toast_bc_clr(self):
+        assert ConfigCommand.early_answer_toast("cu:bc_clr") == "Auto-cancel: cleared"
