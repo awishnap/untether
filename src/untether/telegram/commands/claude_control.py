@@ -178,6 +178,7 @@ class ClaudeControlCommand:
                 return CommandResult(
                     text="✅ Plan approved — Claude Code will proceed",
                     notify=True,
+                    skip_reply=True,
                 )
             else:
                 _OUTLINE_PENDING.discard(session_id)
@@ -189,6 +190,7 @@ class ClaudeControlCommand:
                 return CommandResult(
                     text="❌ Plan denied — send a follow-up message with feedback",
                     notify=True,
+                    skip_reply=True,
                 )
 
         # Grab session_id before send_claude_control_response deletes it
@@ -220,10 +222,16 @@ class ClaudeControlCommand:
             )
 
         # Clear any discuss cooldown on explicit approve/deny
+        had_outline = False
         if session_id:
             clear_discuss_cooldown(session_id)
             _OUTLINE_PENDING.discard(session_id)
-            # Delete outline messages when ExitPlanMode is approved/denied
+            # Delete outline messages when ExitPlanMode is approved/denied.
+            # Track whether outlines existed — if the callback originated from
+            # an outline message (now deleted), we must skip replying to it.
+            from ...runner_bridge import _OUTLINE_REGISTRY
+
+            had_outline = session_id in _OUTLINE_REGISTRY
             await delete_outline_messages(session_id)
 
         action_text = "✅ Approved" if approved else "❌ Denied"
@@ -236,6 +244,7 @@ class ClaudeControlCommand:
         return CommandResult(
             text=f"{action_text} permission request",
             notify=True,
+            skip_reply=had_outline,
         )
 
 

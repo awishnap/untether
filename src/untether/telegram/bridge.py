@@ -253,6 +253,8 @@ class TelegramTransport:
             logger.warning(
                 "transport.send.failed",
                 chat_id=chat_id,
+                reply_to_message_id=reply_to_message_id,
+                text_len=len(message.text) if message.text else 0,
             )
             return None
         if followups:

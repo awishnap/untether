@@ -159,6 +159,40 @@ def test_auto_approve_types_add_to_queue(subtype: str, extra_fields: dict) -> No
 
 
 @pytest.mark.parametrize(
+    "subtype,extra_fields,expected_input",
+    [
+        ("initialize", {"hooks": None}, {}),
+        (
+            "hook_callback",
+            {"callback_id": "cb-1", "input": {"key": "val"}},
+            {"key": "val"},
+        ),
+        ("mcp_message", {"server_name": "srv", "message": {}}, {}),
+        ("rewind_files", {"user_message_id": "msg-1"}, {}),
+        ("interrupt", {}, {}),
+    ],
+)
+def test_auto_approve_types_register_input(
+    subtype: str, extra_fields: dict, expected_input: dict
+) -> None:
+    """Auto-approve types register input in _REQUEST_TO_INPUT for updatedInput."""
+    state, factory = _make_state_with_session()
+    request = {"subtype": subtype, **extra_fields}
+    req_id = f"req-input-{subtype}"
+    event = _decode_event(
+        {
+            "type": "control_request",
+            "request_id": req_id,
+            "request": request,
+        }
+    )
+    translate_claude_event(event, title="claude", state=state, factory=factory)
+
+    assert req_id in _REQUEST_TO_INPUT
+    assert _REQUEST_TO_INPUT[req_id] == expected_input
+
+
+@pytest.mark.parametrize(
     "tool_name",
     [
         "Bash",
@@ -1571,3 +1605,72 @@ class TestCancelCleanup:
         # Verify the outline_guard check returns False
         outline_guard = sid in _OUTLINE_PENDING and 0 < 200
         assert not outline_guard
+
+
+# ---------------------------------------------------------------------------
+# Issue #148 — discuss-approval results skip reply to deleted outline message
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_discuss_approve_result_skips_reply() -> None:
+    """Post-outline 'Approve Plan' returns CommandResult with skip_reply=True."""
+    from untether.commands import CommandContext
+    from untether.telegram.commands.claude_control import ClaudeControlCommand
+    from untether.transport import MessageRef
+
+    runner = ClaudeRunner(claude_cmd="claude")
+    session_id = "sess-skip"
+    _ACTIVE_RUNNERS[session_id] = (runner, 0.0)
+
+    ctx = CommandContext(
+        command="claude_control",
+        text=f"claude_control:approve:da:{session_id}",
+        args_text=f"approve:da:{session_id}",
+        args=(f"approve:da:{session_id}",),
+        message=MessageRef(channel_id=123, message_id=1),
+        reply_to=None,
+        reply_text=None,
+        config_path=None,
+        plugin_config={},
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
+    )
+
+    cmd = ClaudeControlCommand()
+    result = await cmd.handle(ctx)
+    assert result is not None
+    assert result.skip_reply is True
+    assert "approved" in result.text.lower()
+
+
+@pytest.mark.anyio
+async def test_discuss_deny_result_skips_reply() -> None:
+    """Post-outline 'Deny' returns CommandResult with skip_reply=True."""
+    from untether.commands import CommandContext
+    from untether.telegram.commands.claude_control import ClaudeControlCommand
+    from untether.transport import MessageRef
+
+    runner = ClaudeRunner(claude_cmd="claude")
+    session_id = "sess-skip-deny"
+    _ACTIVE_RUNNERS[session_id] = (runner, 0.0)
+
+    ctx = CommandContext(
+        command="claude_control",
+        text=f"claude_control:deny:da:{session_id}",
+        args_text=f"deny:da:{session_id}",
+        args=(f"deny:da:{session_id}",),
+        message=MessageRef(channel_id=123, message_id=1),
+        reply_to=None,
+        reply_text=None,
+        config_path=None,
+        plugin_config={},
+        runtime=None,  # type: ignore[arg-type]
+        executor=None,  # type: ignore[arg-type]
+    )
+
+    cmd = ClaudeControlCommand()
+    result = await cmd.handle(ctx)
+    assert result is not None
+    assert result.skip_reply is True
+    assert "denied" in result.text.lower()

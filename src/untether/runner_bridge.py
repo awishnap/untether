@@ -4,6 +4,7 @@ import contextlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -83,6 +84,19 @@ async def delete_outline_messages(session_id: str) -> None:
     refs.clear()
 
 
+# ---------------------------------------------------------------------------
+# Progress message persistence (orphan cleanup across restarts)
+# ---------------------------------------------------------------------------
+
+_PROGRESS_PERSISTENCE_PATH: Path | None = None
+
+
+def set_progress_persistence_path(path: Path | None) -> None:
+    """Set the path for progress message persistence (called from loop.py)."""
+    global _PROGRESS_PERSISTENCE_PATH  # noqa: PLW0603
+    _PROGRESS_PERSISTENCE_PATH = path
+
+
 # Usage alert thresholds (percentage of 5h window)
 _USAGE_WARN_PCT = 70
 _USAGE_CRITICAL_PCT = 90
@@ -138,6 +152,11 @@ _DEFAULT_PREAMBLE = (
     "  ### Plan/Document Created (if applicable)\n"
     "  - [Path and concise summary of any plan, design doc, or document created — "
     "the user cannot easily open files from Telegram]\n"
+    "  ### Files for Review (if applicable)\n"
+    "  - To send files to the user, write them to `.untether-outbox/`\n"
+    "  - Example: `mkdir -p .untether-outbox && cp docs/plan.md .untether-outbox/`\n"
+    "  - Files are delivered as Telegram documents when the run completes\n"
+    "  - The user can also request any project file with `/file get <path>`\n"
     "  ### Next Steps\n"
     "  - [Remaining work, if any]\n"
     "  ### Decisions Needed (if any)\n"
@@ -520,6 +539,8 @@ class ExecBridgeConfig:
     presenter: Presenter
     final_notify: bool
     min_render_interval: float = 0.0
+    send_file: Callable[..., Awaitable[Any]] | None = None
+    outbox_config: Any | None = None
 
 
 @dataclass(slots=True)
@@ -642,6 +663,7 @@ class ProgressEdits:
         self.rendered_seq = 0
         self._outline_sent: bool = False
         self._outline_refs: list[MessageRef] = []
+        self._outline_just_resolved: bool = False
         self.signal_send, self.signal_recv = anyio.create_memory_object_stream(1)
 
     async def run(self) -> None:
@@ -909,6 +931,10 @@ class ProgressEdits:
                 )
                 new_kb = cancel_row
                 has_approval = False
+                # Suppress the push notification for the next real approval
+                # buttons — the user just interacted with the outline and
+                # doesn't need another "Action required" push.
+                self._outline_just_resolved = True
 
             try:
                 # Send full outline as separate message(s) when approval buttons appear
@@ -935,30 +961,37 @@ class ProgressEdits:
 
                 if has_approval and not had_approval and not self._approval_notified:
                     self._approval_notified = True
-                    # Contextual notification text
-                    notify_text = "Action required \u2014 approval needed"
-                    for a in state.actions:
-                        if not a.completed and a.action.detail.get("ask_question"):
-                            notify_text = "Question from Claude Code"
-                            break
+                    # After an outline flow, skip one notification cycle —
+                    # the user just approved/denied via outline buttons and
+                    # doesn't need a duplicate "Action required" push.
+                    if self._outline_just_resolved:
+                        self._outline_just_resolved = False
+                    else:
+                        # Contextual notification text
+                        notify_text = "Action required \u2014 approval needed"
+                        for a in state.actions:
+                            if not a.completed and a.action.detail.get("ask_question"):
+                                notify_text = "Question from Claude Code"
+                                break
 
-                    async def _send_notify(text: str) -> None:
-                        try:
-                            self._approval_notify_ref = await self.transport.send(
-                                channel_id=self.channel_id,
-                                message=RenderedMessage(text=text),
-                                options=SendOptions(
-                                    notify=True,
-                                    reply_to=self.progress_ref,
-                                    thread_id=self.thread_id,
-                                ),
-                            )
-                        except Exception:  # noqa: BLE001
-                            logger.debug(
-                                "progress_edits.notify_send_failed", exc_info=True
-                            )
+                        async def _send_notify(text: str) -> None:
+                            try:
+                                self._approval_notify_ref = await self.transport.send(
+                                    channel_id=self.channel_id,
+                                    message=RenderedMessage(text=text),
+                                    options=SendOptions(
+                                        notify=True,
+                                        reply_to=self.progress_ref,
+                                        thread_id=self.thread_id,
+                                    ),
+                                )
+                            except Exception:  # noqa: BLE001
+                                logger.debug(
+                                    "progress_edits.notify_send_failed",
+                                    exc_info=True,
+                                )
 
-                    bg_tg.start_soon(_send_notify, notify_text)
+                        bg_tg.start_soon(_send_notify, notify_text)
                 elif had_approval and not has_approval:
                     ref_to_delete = self._approval_notify_ref
                     self._approval_notify_ref = None
@@ -1178,6 +1211,8 @@ class ProgressEdits:
                         error=str(exc),
                         error_type=exc.__class__.__name__,
                     )
+        # Note: unregister_progress() is called AFTER send_result_message()
+        # in handle_message(), not here, to avoid an orphan window.
 
 
 @dataclass(frozen=True, slots=True)
@@ -1226,6 +1261,16 @@ async def send_initial_progress(
             channel_id=sent_ref.channel_id,
             message_id=sent_ref.message_id,
         )
+        if _PROGRESS_PERSISTENCE_PATH is not None:
+            from .telegram.progress_persistence import register_progress
+
+            session_key = f"{channel_id}:{sent_ref.message_id}"
+            register_progress(
+                _PROGRESS_PERSISTENCE_PATH,
+                session_key,
+                int(channel_id),
+                int(sent_ref.message_id),
+            )
 
     return ProgressMessageState(
         ref=sent_ref,
@@ -1789,3 +1834,40 @@ async def handle_message(
         delete_tag="final",
         thread_id=incoming.thread_id,
     )
+
+    # Unregister progress persistence after the final message is sent.
+    # Must happen AFTER send_result_message() so a crash between
+    # delete_ephemeral() and here still has an orphan cleanup pointer.
+    if progress_ref is not None and _PROGRESS_PERSISTENCE_PATH is not None:
+        from .telegram.progress_persistence import unregister_progress
+
+        session_key = f"{incoming.channel_id}:{progress_ref.message_id}"
+        unregister_progress(_PROGRESS_PERSISTENCE_PATH, session_key)
+
+    # Deliver outbox files (agent-initiated file delivery)
+    if (
+        cfg.send_file is not None
+        and cfg.outbox_config is not None
+        and run_ok is not False
+    ):
+        from .telegram.outbox_delivery import deliver_outbox_files
+        from .utils.paths import get_run_base_dir
+
+        _run_root = get_run_base_dir()
+        if _run_root is not None:
+            _oc = cfg.outbox_config
+            try:
+                await deliver_outbox_files(
+                    send_file=cfg.send_file,
+                    channel_id=incoming.channel_id,
+                    thread_id=incoming.thread_id,
+                    reply_to_msg_id=user_ref.message_id,
+                    run_root=_run_root,
+                    outbox_dir=_oc.outbox_dir,
+                    deny_globs=_oc.deny_globs,
+                    max_download_bytes=_oc.max_download_bytes,
+                    max_files=_oc.outbox_max_files,
+                    cleanup=_oc.outbox_cleanup,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("outbox.delivery_failed", exc_info=True)

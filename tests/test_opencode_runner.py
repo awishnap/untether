@@ -497,3 +497,112 @@ async def test_run_serializes_same_session() -> None:
         await anyio.sleep(0)
         gate.set()
     assert max_in_flight == 1
+
+
+# ---------------------------------------------------------------------------
+# Issue #146 — error events with no prior text should show error message
+# ---------------------------------------------------------------------------
+
+
+def test_error_event_no_prior_text_uses_error_message() -> None:
+    """When Error arrives with no prior Text events, answer must contain error text."""
+    state = OpenCodeStreamState()
+    state.session_id = "ses_err"
+    state.emitted_started = True
+
+    events = translate_opencode_event(
+        _decode_event(
+            {
+                "type": "error",
+                "sessionID": "ses_err",
+                "error": "Rate limit exceeded",
+            }
+        ),
+        title="opencode",
+        state=state,
+    )
+    assert len(events) == 1
+    completed = events[0]
+    assert isinstance(completed, CompletedEvent)
+    assert completed.ok is False
+    assert completed.answer != ""
+    assert "Rate limit" in completed.answer
+
+
+def test_process_error_no_prior_text_uses_error_message() -> None:
+    """process_error_events with empty state produces non-empty answer."""
+    runner = OpenCodeRunner(opencode_cmd="opencode")
+    state = OpenCodeStreamState()
+    events = runner.process_error_events(
+        1, resume=None, found_session=None, state=state
+    )
+    completed = next(e for e in events if isinstance(e, CompletedEvent))
+    assert completed.answer != ""
+    assert "opencode failed" in completed.answer
+
+
+def test_stream_end_no_session_no_text_uses_error_message() -> None:
+    """stream_end_events no-session path with no text produces non-empty answer."""
+    runner = OpenCodeRunner(opencode_cmd="opencode")
+    state = OpenCodeStreamState()
+    events = runner.stream_end_events(resume=None, found_session=None, state=state)
+    completed = next(e for e in events if isinstance(e, CompletedEvent))
+    assert completed.answer != ""
+    assert "no session_id" in completed.answer
+
+
+# --- #150: OpenCode empty body fallback to last_tool_error ---
+
+
+def test_translate_stop_no_text_falls_back_to_tool_error() -> None:
+    """StepFinish reason=stop with no Text events uses last_tool_error."""
+    state = OpenCodeStreamState(session_id="ses_test")
+    state.last_tool_error = "file not found: /nonexistent/path.txt"
+    event = opencode_schema.StepFinish(part={"reason": "stop"})
+    events = translate_opencode_event(event, title="opencode", state=state)
+    completed = next(e for e in events if isinstance(e, CompletedEvent))
+    assert completed.ok is True
+    assert completed.answer == "file not found: /nonexistent/path.txt"
+
+
+def test_translate_stop_with_text_ignores_tool_error() -> None:
+    """StepFinish reason=stop prefers last_text over last_tool_error."""
+    state = OpenCodeStreamState(session_id="ses_test")
+    state.last_text = "Here are the files"
+    state.last_tool_error = "some earlier error"
+    event = opencode_schema.StepFinish(part={"reason": "stop"})
+    events = translate_opencode_event(event, title="opencode", state=state)
+    completed = next(e for e in events if isinstance(e, CompletedEvent))
+    assert completed.answer == "Here are the files"
+
+
+def test_translate_tool_error_status_captures_last_tool_error() -> None:
+    """ToolUse error status populates state.last_tool_error."""
+    from untether.model import Action
+
+    state = OpenCodeStreamState(session_id="ses_test")
+    state.pending_actions["tool_1"] = Action(
+        id="tool_1", kind="tool", title="read", detail={}
+    )
+    event = opencode_schema.ToolUse(
+        part={
+            "id": "tool_1",
+            "state": {
+                "status": "error",
+                "error": "ENOENT: /nonexistent/path.txt",
+            },
+        },
+    )
+    translate_opencode_event(event, title="opencode", state=state)
+    assert state.last_tool_error == "ENOENT: /nonexistent/path.txt"
+
+
+def test_stream_end_saw_step_finish_no_text_falls_back_to_tool_error() -> None:
+    """stream_end_events with saw_step_finish and no text uses last_tool_error."""
+    runner = OpenCodeRunner(opencode_cmd="opencode")
+    session = ResumeToken(engine=ENGINE, value="ses_test")
+    state = OpenCodeStreamState(saw_step_finish=True)
+    state.last_tool_error = "permission denied"
+    events = runner.stream_end_events(resume=None, found_session=session, state=state)
+    completed = next(e for e in events if isinstance(e, CompletedEvent))
+    assert completed.answer == "permission denied"
