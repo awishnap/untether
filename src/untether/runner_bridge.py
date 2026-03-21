@@ -656,6 +656,8 @@ class ProgressEdits:
         self._prev_diag: Any = None
         self._stall_check_interval: float = 60.0
         self._stall_repeat_seconds: float = 180.0
+        self._prev_recent_events: list[tuple[float, str]] | None = None
+        self._frozen_ring_count: int = 0
         self.pid: int | None = None
         self.stream: Any = None  # JsonlStreamState, set from run_runner_with_cancel
         self.cancel_event: anyio.Event | None = None  # threaded from RunningTask
@@ -690,9 +692,13 @@ class ProgressEdits:
             self._peak_idle = max(self._peak_idle, elapsed)
 
             # Use longer threshold when waiting for user approval or running a tool
+            mcp_server = self._has_running_mcp_tool()
             if self._has_pending_approval():
                 threshold = self._STALL_THRESHOLD_APPROVAL
                 threshold_reason = "pending_approval"
+            elif mcp_server is not None:
+                threshold = self._STALL_THRESHOLD_MCP_TOOL
+                threshold_reason = "running_mcp_tool"
             elif self._has_running_tool():
                 threshold = self._STALL_THRESHOLD_TOOL
                 threshold_reason = "running_tool"
@@ -810,16 +816,34 @@ class ProgressEdits:
                 self.signal_send.close()
                 return
 
+            # Track whether the recent_events ring buffer has changed since
+            # last stall check.  A frozen buffer means no new JSONL events
+            # arrived — the process may be stuck in a retry loop despite
+            # burning CPU.
+            recent_snapshot = [(round(t, 1), lbl) for t, lbl in recent[-5:]]
+            if self._prev_recent_events == recent_snapshot:
+                self._frozen_ring_count += 1
+            else:
+                self._frozen_ring_count = 0
+            self._prev_recent_events = recent_snapshot
+
             # Suppress Telegram notification when process is CPU-active
             # (extended thinking, background agents). Instead, trigger a
             # heartbeat re-render so the elapsed time counter keeps ticking.
-            if cpu_active is True:
+            #
+            # Exception: if the ring buffer has been frozen for 3+ checks,
+            # the process is likely stuck (retry loop, hung API call, dead
+            # thinking) — escalate to a notification despite CPU activity.
+            _FROZEN_ESCALATION_THRESHOLD = 3
+            frozen_escalate = self._frozen_ring_count >= _FROZEN_ESCALATION_THRESHOLD
+            if cpu_active is True and not frozen_escalate:
                 logger.info(
                     "progress_edits.stall_suppressed_notification",
                     channel_id=self.channel_id,
                     seconds_since_last_event=round(elapsed, 1),
                     stall_warn_count=self._stall_warn_count,
                     pid=self.pid,
+                    frozen_ring_count=self._frozen_ring_count,
                 )
                 # Heartbeat: bump event_seq to wake the render loop and
                 # refresh the progress message with updated elapsed time.
@@ -832,11 +856,41 @@ class ProgressEdits:
                 ):
                     self.signal_send.send_nowait(None)
             else:
-                # Telegram notification (cpu_active=False or None)
-                parts = [f"⏳ No progress for {int(elapsed // 60)} min"]
+                # Telegram notification (cpu_active=False/None, or frozen
+                # ring buffer escalation despite CPU activity)
+                mins = int(elapsed // 60)
+                mcp_hung = mcp_server is not None and frozen_escalate
+                if mcp_hung:
+                    logger.warning(
+                        "progress_edits.mcp_tool_hung",
+                        channel_id=self.channel_id,
+                        mcp_server=mcp_server,
+                        frozen_ring_count=self._frozen_ring_count,
+                        seconds_since_last_event=round(elapsed, 1),
+                        pid=self.pid,
+                    )
+                    parts = [
+                        f"⏳ MCP tool may be hung: {mcp_server} ({mins} min, no new events)"
+                    ]
+                elif frozen_escalate:
+                    logger.warning(
+                        "progress_edits.frozen_ring_escalation",
+                        channel_id=self.channel_id,
+                        frozen_ring_count=self._frozen_ring_count,
+                        seconds_since_last_event=round(elapsed, 1),
+                        pid=self.pid,
+                    )
+                    parts = [
+                        f"⏳ No progress for {mins} min (CPU active, no new events)"
+                    ]
+                elif mcp_server is not None:
+                    parts = [f"⏳ MCP tool running: {mcp_server} ({mins} min)"]
+                else:
+                    parts = [f"⏳ No progress for {mins} min"]
                 if self._stall_warn_count > 1:
                     parts[0] += f" (warned {self._stall_warn_count}x)"
-                parts.append("— session may be stuck.")
+                if not mcp_hung and not frozen_escalate and mcp_server is None:
+                    parts.append("— session may be stuck.")
                 if last_action:
                     parts.append(f"Last: {last_action}")
                 if diag:
@@ -872,6 +926,23 @@ class ProgressEdits:
                 return True
             break  # only check the most recent
         return False
+
+    def _has_running_mcp_tool(self) -> str | None:
+        """Return the MCP server name if the most recent action is a running MCP tool.
+
+        MCP tool names follow the pattern: mcp__<server>__<tool_name>.
+        Returns the server name (e.g. 'cloudflare-observability') or None.
+        """
+        for action_state in reversed(list(self.tracker._actions.values())):
+            if not action_state.completed:
+                name = (
+                    action_state.action.detail.get("name") or action_state.action.title
+                )
+                if isinstance(name, str) and name.startswith("mcp__"):
+                    parts = name.split("__", 2)
+                    return parts[1] if len(parts) >= 2 else name
+            break  # only check the most recent
+        return None
 
     def _last_action_summary(self) -> str | None:
         """Return a short description of the most recent action."""
@@ -916,11 +987,13 @@ class ProgressEdits:
             )
             has_approval = len(new_kb) > 1
             had_approval = len(old_kb) > 1
+            # Track raw source state before stripping (#163)
+            source_has_approval = has_approval
 
-            # If the callback handler already cleaned up outline messages
-            # (via delete_outline_messages), the synthetic discuss_approve
-            # action still renders stale buttons. Force cancel-only keyboard.
-            if self._outline_sent and not self._outline_refs and has_approval:
+            # When outline has been sent (visible or already cleaned up),
+            # strip approval buttons from the progress message — the outline
+            # message has the canonical approval buttons.  (#163)
+            if self._outline_sent and has_approval:
                 cancel_row = new_kb[-1:]  # keep only the cancel row
                 rendered = RenderedMessage(
                     text=rendered.text,
@@ -943,11 +1016,9 @@ class ProgressEdits:
                         outline_text = a.action.detail.get("outline_full_text")
                         if outline_text and isinstance(outline_text, str):
                             self._outline_sent = True
-                            # Pass approval rows (exclude cancel) for the last outline msg
+                            # Full keyboard (including cancel) for outline msg (#163)
                             approval_kb = (
-                                {"inline_keyboard": new_kb[:-1]}
-                                if len(new_kb) > 1
-                                else None
+                                {"inline_keyboard": new_kb} if len(new_kb) > 1 else None
                             )
                             await self._send_outline(
                                 outline_text,
@@ -957,6 +1028,18 @@ class ProgressEdits:
                                     state.resume.value if state.resume else None
                                 ),
                             )
+                            # Strip approval from progress this cycle too —
+                            # outline message has the canonical buttons (#163)
+                            cancel_row = new_kb[-1:]
+                            rendered = RenderedMessage(
+                                text=rendered.text,
+                                extra={
+                                    **rendered.extra,
+                                    "reply_markup": {"inline_keyboard": cancel_row},
+                                },
+                            )
+                            new_kb = cancel_row
+                            has_approval = False
                             break
 
                 if has_approval and not had_approval and not self._approval_notified:
@@ -1034,6 +1117,11 @@ class ProgressEdits:
 
                     bg_tg.start_soon(_delete_outlines, outline_refs)
 
+                # Reset outline state when source stops providing approval,
+                # so future ExitPlanMode can show buttons on progress (#163)
+                if self._outline_sent and not source_has_approval:
+                    self._outline_sent = False
+
                 if rendered != self.last_rendered:
                     # Log keyboard transitions at info level for #103/#104 diagnostics
                     if has_approval and not had_approval:
@@ -1074,6 +1162,7 @@ class ProgressEdits:
 
     _STALL_THRESHOLD_SECONDS: float = 300.0  # 5 minutes
     _STALL_THRESHOLD_TOOL: float = 600.0  # 10 minutes when a tool is actively running
+    _STALL_THRESHOLD_MCP_TOOL: float = 900.0  # 15 min for MCP tools (network-bound)
     _STALL_THRESHOLD_APPROVAL: float = 1800.0  # 30 minutes when waiting for approval
     _STALL_MAX_WARNINGS: int = 10  # absolute cap
     _STALL_MAX_WARNINGS_NO_PID: int = 3  # aggressive cap when pid=None + no events
@@ -1095,6 +1184,8 @@ class ProgressEdits:
             self._stall_warned = False
             self._stall_warn_count = 0
             self._prev_diag = None
+            self._frozen_ring_count = 0
+            self._prev_recent_events = None
         self._last_event_at = now
         self.event_seq += 1
         try:
@@ -1511,6 +1602,7 @@ async def handle_message(
     watchdog = _load_watchdog_settings()
     if watchdog is not None:
         edits._stall_repeat_seconds = watchdog.stall_repeat_seconds
+        edits._STALL_THRESHOLD_MCP_TOOL = watchdog.mcp_tool_timeout
         if hasattr(runner, "_LIVENESS_TIMEOUT_SECONDS"):
             runner._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
         if hasattr(runner, "_stall_auto_kill"):
