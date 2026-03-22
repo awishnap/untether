@@ -120,7 +120,9 @@ The stall watchdog monitors engine subprocesses for periods of inactivity (no JS
 
 **If the warning says "CPU active, no new events"**, the process is using CPU but hasn't produced any new JSONL events for 3+ stall checks. This can happen when Claude Code is stuck in a long API call, extended thinking, or an internal retry loop. Use `/cancel` if the silence persists.
 
-**If the warning says "X tool may be stuck (N min, process waiting)"**, Claude Code's main process is sleeping while waiting for a child process (e.g. a Bash command running `curl` or a long build). The CPU activity shown in the diagnostics is from the child process, not from Claude thinking. Common cause: a network request to a slow or unresponsive API endpoint. Use `/cancel` and resume, asking Claude to skip the hung command — or wait if the command is legitimately long-running.
+**If the warning says "Bash command still running (X min)"**, Claude Code is waiting for a long-running tool subprocess (benchmark, build, test suite). This warning fires once when the tool exceeds the threshold (10 min by default). While the child process is actively consuming CPU, repeat warnings are suppressed — you won't see the same message every 3 minutes. If the child process stops consuming CPU, warnings resume with "tool may be stuck".
+
+**If the warning says "X tool may be stuck (N min, no CPU activity)"**, the tool subprocess has stopped consuming CPU, suggesting it may be genuinely stuck (e.g. a hung `curl`, a network timeout, a deadlock). Use `/cancel` and resume, asking Claude to skip the hung command.
 
 **If the warning says "session may be stuck"**, the process may genuinely be stalled. Check:
 
@@ -128,7 +130,7 @@ The stall watchdog monitors engine subprocesses for periods of inactivity (no JS
 2. If CPU is active and TCP connections exist, the process is likely still working
 3. If CPU is idle and no TCP connections, the process may be truly stuck — use `/cancel`
 
-**Tuning:** All thresholds are configurable via `[watchdog]` in `untether.toml`. See the [config reference](../reference/config.md#watchdog).
+**Tuning:** All thresholds are configurable via `[watchdog]` in `untether.toml`. Use `tool_timeout` to increase the initial threshold for local tools (default 10 min), and `mcp_tool_timeout` for MCP tools (default 15 min). See the [config reference](../reference/config.md#watchdog).
 
 ## Messages too long or truncated
 

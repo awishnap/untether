@@ -346,6 +346,7 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             args.extend(["--model", str(model)])
         if run_options is not None and run_options.permission_mode:
             args.extend(["--approval-mode", run_options.permission_mode])
+        args.append("--")
         args.extend(["-p", prompt])
         return args
 

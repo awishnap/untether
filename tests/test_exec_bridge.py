@@ -2752,11 +2752,13 @@ async def test_stall_frozen_ring_escalates_without_mcp_tool() -> None:
 
 @pytest.mark.anyio
 async def test_stall_frozen_ring_uses_tool_message_when_bash_running() -> None:
-    """When ring buffer is frozen but a Bash command is running (main sleeping,
-    CPU active on children), show reassuring 'still running' instead of 'No progress'.
+    """When ring buffer is frozen and a Bash command is running (main sleeping,
+    CPU active on children), the first stall warning fires and repeats are
+    suppressed — because no JSONL events during tool execution is expected.
 
-    Regression test for #188: frozen_escalate branch fired alarming 'No progress'
-    message even when Claude was legitimately waiting for a long Bash command.
+    Regression test for #188: frozen ring buffer no longer fires alarming
+    'No progress' or spams repeated warnings when Claude is legitimately
+    waiting for a long Bash command.
     """
     from collections import deque
     from types import SimpleNamespace
@@ -2812,6 +2814,8 @@ async def test_stall_frozen_ring_uses_tool_message_when_bash_running() -> None:
             cpu_stime=200 + call_count * 50,
         )
 
+    initial_seq = edits.event_seq
+
     with patch(
         "untether.utils.proc_diag.collect_proc_diag",
         side_effect=sleeping_cpu_diag,
@@ -2827,17 +2831,26 @@ async def test_stall_frozen_ring_uses_tool_message_when_bash_running() -> None:
             tg.start_soon(edits.run)
             tg.start_soon(drive)
 
-    # Should have sent notification with reassuring tool-aware message
-    notify_msgs = [
-        c for c in transport.send_calls if "still running" in c["message"].text.lower()
+    # First warning fires (cpu_active=None on first check, no baseline).
+    # Subsequent stalls suppressed by tool-active suppression (tool running
+    # + CPU active + main sleeping = child process is working).
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "bash" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+        or "still running" in c["message"].text.lower()
     ]
-    assert len(notify_msgs) >= 1, (
-        f"Expected 'Bash command still running' message, got: "
-        f"{[c['message'].text for c in transport.send_calls]}"
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (repeats suppressed), got "
+        f"{len(stall_msgs)}: {[c['message'].text for c in stall_msgs]}"
     )
     # Should mention Bash, NOT "No progress"
-    assert "bash" in notify_msgs[0]["message"].text.lower()
-    assert "no progress" not in notify_msgs[0]["message"].text.lower()
+    assert "bash" in stall_msgs[0]["message"].text.lower()
+    assert "no progress" not in stall_msgs[0]["message"].text.lower()
+    # Heartbeat should have bumped event_seq for suppressed checks
+    assert edits.event_seq > initial_seq
 
 
 def test_frozen_ring_count_resets_on_event() -> None:
@@ -3360,6 +3373,239 @@ async def test_stall_message_includes_tool_name_when_sleeping() -> None:
         f"Expected stall message mentioning 'Bash tool', got messages: "
         f"{[c['message'].text for c in transport.send_calls]}"
     )
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_suppressed_after_first_warning() -> None:
+    """When main sleeping + cpu active + tool running, the first stall warning
+    fires but repeats are suppressed (heartbeat only)."""
+    from unittest.mock import patch
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action (not completed)
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    initial_seq = edits.event_seq
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(8):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # First warning should fire (stall_warn_count == 1).
+    # Subsequent should be suppressed (tool running + cpu active).
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "still running" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (first only), got {len(stall_msgs)}: "
+        f"{[c['message'].text for c in stall_msgs]}"
+    )
+    # Heartbeat should have bumped event_seq for suppressed checks
+    assert edits.event_seq > initial_seq
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_not_suppressed_when_cpu_idle() -> None:
+    """When main sleeping + cpu NOT active + tool running, stall warnings
+    should continue firing (tool may be genuinely stuck)."""
+    from unittest.mock import patch
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    # Flat CPU — no activity (all snapshots return same values)
+    flat_diag = ProcessDiag(
+        pid=12345,
+        alive=True,
+        state="S",
+        cpu_utime=1000,
+        cpu_stime=200,
+    )
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        return_value=flat_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(6):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # CPU idle — all warnings should fire (tool may be stuck)
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "stuck" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "still running" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) >= 2, (
+        f"Expected multiple stall notifications when CPU idle, got {len(stall_msgs)}: "
+        f"{[c['message'].text for c in stall_msgs]}"
+    )
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_suppressed_even_with_frozen_ring() -> None:
+    """When main sleeping + cpu active + tool running, repeat stall warnings
+    are suppressed even if the ring buffer is frozen — because no JSONL events
+    during tool execution is expected (the child process is working)."""
+    from unittest.mock import patch
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    # Force frozen ring buffer count above escalation threshold (3)
+    edits._frozen_ring_count = 5
+
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    initial_seq = edits.event_seq
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(6):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # Despite frozen ring buffer, tool + cpu active → only first warning fires
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "still running" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (frozen ring suppressed by tool-active), "
+        f"got {len(stall_msgs)}: {[c['message'].text for c in stall_msgs]}"
+    )
+    # Heartbeat should have bumped event_seq
+    assert edits.event_seq > initial_seq
 
 
 # ---------------------------------------------------------------------------

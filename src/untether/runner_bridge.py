@@ -883,6 +883,7 @@ class ProgressEdits:
             _FROZEN_ESCALATION_THRESHOLD = 3
             frozen_escalate = self._frozen_ring_count >= _FROZEN_ESCALATION_THRESHOLD
             main_sleeping = diag is not None and diag.state == "S"
+            _tool_running = self._has_running_tool() or mcp_server is not None
             if cpu_active is True and not frozen_escalate and not main_sleeping:
                 logger.info(
                     "progress_edits.stall_suppressed_notification",
@@ -895,6 +896,34 @@ class ProgressEdits:
                 # Heartbeat: bump event_seq to wake the render loop and
                 # refresh the progress message with updated elapsed time.
                 # Does NOT reset _last_event_at or stall counters.
+                self.event_seq += 1
+                with contextlib.suppress(
+                    anyio.WouldBlock,
+                    anyio.BrokenResourceError,
+                    anyio.ClosedResourceError,
+                ):
+                    self.signal_send.send_nowait(None)
+            elif (
+                cpu_active is True
+                and main_sleeping
+                and _tool_running
+                and self._stall_warn_count > 1
+            ):
+                # Tool subprocess actively working — first warning already
+                # sent, suppress repeats until CPU goes idle.  The ring
+                # buffer being "frozen" is expected when a tool runs (no
+                # JSONL events while waiting for a child process), so we
+                # intentionally do NOT check frozen_escalate here.
+                # Keeps #168 fix (first warning fires for sleeping+child
+                # scenarios) while eliminating spam for legitimately
+                # long-running commands.
+                logger.info(
+                    "progress_edits.stall_tool_active_suppressed",
+                    channel_id=self.channel_id,
+                    seconds_since_last_event=round(elapsed, 1),
+                    stall_warn_count=self._stall_warn_count,
+                    pid=self.pid,
+                )
                 self.event_seq += 1
                 with contextlib.suppress(
                     anyio.WouldBlock,
@@ -1705,6 +1734,7 @@ async def handle_message(
     watchdog = _load_watchdog_settings()
     if watchdog is not None:
         edits._stall_repeat_seconds = watchdog.stall_repeat_seconds
+        edits._STALL_THRESHOLD_TOOL = watchdog.tool_timeout
         edits._STALL_THRESHOLD_MCP_TOOL = watchdog.mcp_tool_timeout
         if hasattr(runner, "_LIVENESS_TIMEOUT_SECONDS"):
             runner._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
