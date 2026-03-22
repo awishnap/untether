@@ -87,6 +87,20 @@ Run `untether doctor` to see which engines are detected.
 3. Check `debug.log` — the engine may have errored silently
 4. Verify the engine works standalone: run `codex "hello"` (or equivalent) directly in a terminal
 
+## Engine hangs in headless mode
+
+**Symptoms:** The engine starts but produces no output, eventually triggering stall warnings. Common with Codex and OpenCode when the engine needs user input (approval or question) but has no terminal to display it.
+
+### Codex: approval hang
+
+Codex may block waiting for terminal approval in headless mode if no `--ask-for-approval` flag is passed. **Fix:** upgrade to Untether v0.35.0+ which always passes `--ask-for-approval never` (or `untrusted` in safe permission mode). Older versions may not pass this flag, causing Codex to use its default terminal-based approval flow.
+
+### OpenCode: unsupported event warning
+
+If OpenCode emits a JSONL event type that Untether doesn't recognise (e.g. a `question` or `permission` event from a newer OpenCode version), Untether v0.35.0+ shows a visible warning in Telegram: "opencode emitted unsupported event: {type}". In older versions, these events were silently dropped, leaving the user with no feedback until the stall watchdog fired.
+
+If you see this warning, check for an Untether update that adds support for the new event type. OpenCode's `run` command auto-denies questions via permission rules, so this should be rare — it most likely indicates an OpenCode protocol change.
+
 ## Stall warnings
 
 **Symptoms:** Telegram shows "⏳ No progress for X min — session may be stuck" or "⏳ MCP tool running: server-name (X min)".
@@ -105,6 +119,8 @@ The stall watchdog monitors engine subprocesses for periods of inactivity (no JS
 **If the warning says "MCP tool may be hung"**, the MCP tool has been running with no new events for an extended period (3+ stall checks with a frozen event buffer). This usually means the MCP server is stuck in an internal retry loop. Use `/cancel` and retry with a more targeted prompt.
 
 **If the warning says "CPU active, no new events"**, the process is using CPU but hasn't produced any new JSONL events for 3+ stall checks. This can happen when Claude Code is stuck in a long API call, extended thinking, or an internal retry loop. Use `/cancel` if the silence persists.
+
+**If the warning says "X tool may be stuck (N min, process waiting)"**, Claude Code's main process is sleeping while waiting for a child process (e.g. a Bash command running `curl` or a long build). The CPU activity shown in the diagnostics is from the child process, not from Claude thinking. Common cause: a network request to a slow or unresponsive API endpoint. Use `/cancel` and resume, asking Claude to skip the hung command — or wait if the command is legitimately long-running.
 
 **If the warning says "session may be stuck"**, the process may genuinely be stalled. Check:
 
