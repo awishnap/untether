@@ -28,6 +28,8 @@
 - clarify /config default labels and remove redundant "Works with" lines [#119](https://github.com/littlebearapps/untether/issues/119)
 - Codex: always pass `--ask-for-approval` in headless mode — default to `never` (auto-approve all) so Codex never blocks on terminal input; `safe` permission mode still uses `untrusted` [#184](https://github.com/littlebearapps/untether/issues/184)
 - OpenCode: surface unsupported JSONL event types as visible Telegram warnings instead of silently dropping them — prevents silent 5-minute hangs when OpenCode emits new event types (e.g. `question`, `permission`) [#183](https://github.com/littlebearapps/untether/issues/183)
+- stall warnings now succinct and accurate for long-running tools — truncate "Last:" to 80 chars, recognise `command:` prefix (Bash tools), reassuring "still running" message when CPU active, drop PID diagnostics from Telegram messages, only say "may be stuck" when genuinely stuck [#188](https://github.com/littlebearapps/untether/issues/188)
+  - frozen ring buffer escalation now uses tool-aware "still running" message when a known tool is actively running (main sleeping, CPU active on children), instead of alarming "No progress" message
 
 ### changes
 
@@ -60,6 +62,8 @@
   - `AutoContinueSettings` with `enabled` (default true) and `max_retries` (default 1) in `[auto_continue]` config section
   - detection based on protocol invariant: normal sessions always end with `last_event_type=result`
   - sends "⚠️ Auto-continuing — Claude stopped before processing tool results" notification before resuming
+- emoji button labels and edit-in-place for outline approval — ExitPlanMode buttons now show ✅/❌/📋 emoji prefixes; post-outline "Approve Plan"/"Deny" edits the "Asked Claude Code to outline the plan" message in-place instead of creating a second message [#186](https://github.com/littlebearapps/untether/issues/186)
+- redesign startup message layout — version in parentheses, split engine info into "default engine" and "installed engines" lines, italic subheadings, renamed "projects" to "directories" (matching `dir:` footer label), added bug report link [#187](https://github.com/littlebearapps/untether/issues/187)
 
 ### tests
 
