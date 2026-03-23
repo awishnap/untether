@@ -30,6 +30,13 @@
 - OpenCode: surface unsupported JSONL event types as visible Telegram warnings instead of silently dropping them — prevents silent 5-minute hangs when OpenCode emits new event types (e.g. `question`, `permission`) [#183](https://github.com/littlebearapps/untether/issues/183)
 - stall warnings now succinct and accurate for long-running tools — truncate "Last:" to 80 chars, recognise `command:` prefix (Bash tools), reassuring "still running" message when CPU active, drop PID diagnostics from Telegram messages, only say "may be stuck" when genuinely stuck [#188](https://github.com/littlebearapps/untether/issues/188)
   - frozen ring buffer escalation now uses tool-aware "still running" message when a known tool is actively running (main sleeping, CPU active on children), instead of alarming "No progress" message
+- OpenCode model name missing from footer when using default model — `build_runner()` now reads `~/.config/opencode/opencode.json` to detect the configured default model so the `🏷` footer always shows the model (e.g. `openai/gpt-5.2`) even without an `untether.toml` override [#221](https://github.com/littlebearapps/untether/issues/221)
+- OpenCode model override hint — `/config` and engine model sub-page now show `provider/model (e.g. openai/gpt-4o)` instead of the unhelpful "from provider config", guiding users to use the required provider-prefixed format [#220](https://github.com/littlebearapps/untether/issues/220)
+- Codex footer missing model name — Codex runner always includes model in `StartedEvent.meta` so the footer shows the model even when no override is set [#217](https://github.com/littlebearapps/untether/issues/217)
+- `/planmode` command worked in non-Claude engine chats — now gated to Claude-only with a helpful message; Codex/Gemini users are directed to `/config` → Approval policy [#216](https://github.com/littlebearapps/untether/issues/216)
+- `/usage` showed Claude subscription data in non-Claude engine chats — now gated to subscription-supported engines with an engine-specific error message [#215](https://github.com/littlebearapps/untether/issues/215)
+- `/export` showed duplicate "Session Started" headers for resumed sessions — deduplicated so only the first `StartedEvent` renders [#218](https://github.com/littlebearapps/untether/issues/218)
+- Gemini CLI prompt injection — prompts starting with `-` were parsed as flags when passed via `-p <value>`; now uses `--prompt=<value>` to bind the value directly [#219](https://github.com/littlebearapps/untether/issues/219)
 
 ### changes
 
@@ -83,6 +90,10 @@
 - cost footer: tests for suppression on error runs, display on success runs [#120](https://github.com/littlebearapps/untether/issues/120)
 - 10 new auto-continue tests: detection function (bug scenario, non-claude engine, cancelled session, normal result, no resume, max retries) + settings validation (defaults, bounds) [#167](https://github.com/littlebearapps/untether/issues/167)
 - 2 new stall sleeping-process tests: notification not suppressed when main process sleeping (state=S), stall message includes tool name [#168](https://github.com/littlebearapps/untether/issues/168)
+- 8 new `_read_opencode_default_model` tests: valid config, missing file, invalid JSON, empty model, no model key, build_runner fallback, untether config priority, no OC config [#221](https://github.com/littlebearapps/untether/issues/221)
+- engine command gate tests: `/planmode` Claude-only, `/usage` subscription-engine-only [#215](https://github.com/littlebearapps/untether/issues/215), [#216](https://github.com/littlebearapps/untether/issues/216)
+- export dedup test: duplicate started events deduplicated in markdown export [#218](https://github.com/littlebearapps/untether/issues/218)
+- Gemini `--prompt=` build_args test [#219](https://github.com/littlebearapps/untether/issues/219)
 
 ### docs
 
