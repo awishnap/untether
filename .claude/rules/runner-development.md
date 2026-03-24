@@ -13,6 +13,10 @@ Every run MUST emit exactly this sequence:
 
 After emitting `CompletedEvent`, drop all subsequent JSONL lines.
 
+## Stream state tracking
+
+`JsonlStreamState` captures subprocess lifecycle data including `proc_returncode`. Signal deaths (rc>128 or rc<0) are NOT auto-continued — see `_is_signal_death()` in `runner_bridge.py`.
+
 ## Event creation
 
 Use `EventFactory` (from `src/untether/events.py`) for all event construction:

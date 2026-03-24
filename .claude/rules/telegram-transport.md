@@ -51,6 +51,10 @@ Messages that should auto-delete when a run finishes:
 - Approval buttons: detect transitions via keyboard length changes
 - Push notification: sent separately (`notify=True`) when approval buttons appear
 
+## /new command
+
+`/new` cancels all running tasks for the chat via `_cancel_chat_tasks()` (in `commands/topics.py`) before clearing stored sessions. This prevents process leaks from orphaned Claude/engine subprocesses.
+
 ## After changes
 
 If this change will be released, run integration tests T1-T10 (Telegram transport), S7 (rapid-fire), S8 (long prompt) via `@untether_dev_bot`. See `docs/reference/integration-testing.md` — the "Changed area" table maps `telegram/*.py` changes to required tests.

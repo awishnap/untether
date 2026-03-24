@@ -32,7 +32,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 - **`[progress]` config** — global verbosity and max_actions settings in `untether.toml`
 - **Pi context compaction** — `AutoCompactionStart`/`AutoCompactionEnd` events rendered as progress actions
 - **Stall diagnostics & liveness watchdog** — `/proc` process diagnostics (CPU, RSS, TCP, FDs), progressive stall warnings with Telegram notifications, liveness watchdog for alive-but-silent subprocesses, stall auto-cancel (dead process, no-PID zombie, absolute cap) with CPU-active suppression (sleeping-process aware — shows tool name when main process waiting on child), tool-active repeat suppression (first warning fires, repeats suppressed while child CPU-active), MCP tool-aware threshold (15 min for network-bound MCP calls vs 10 min for local tools) with contextual "MCP tool running: {server}" messaging, `session.summary` structured log; `[watchdog]` config section with configurable `tool_timeout` and `mcp_tool_timeout`
-- **Auto-continue** — detects Claude Code sessions that exit after receiving tool results without processing them (upstream bugs #34142, #30333) and auto-resumes; configurable via `[auto_continue]` with `enabled` (default true) and `max_retries` (default 1)
+- **Auto-continue** — detects Claude Code sessions that exit after receiving tool results without processing them (upstream bugs #34142, #30333) and auto-resumes; suppressed on signal deaths (rc=143/SIGTERM, rc=137/SIGKILL) to prevent death spirals under memory pressure; configurable via `[auto_continue]` with `enabled` (default true) and `max_retries` (default 1)
 - **File upload deduplication** — auto-appends `_1`, `_2`, … when target file exists, instead of requiring `--force`; media groups without captions auto-save to `incoming/`
 - **Agent-initiated file delivery (outbox)** — agents write files to `.untether-outbox/` during a run; Untether sends them as Telegram documents on completion with `📎` captions; deny-glob security, size limits, file count cap, auto-cleanup; `[transports.telegram.files]` config
 - **Resume line formatting** — visual separation with blank line and ↩️ prefix in final message footer
@@ -60,7 +60,7 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencod
 | `runners/claude.py` | Claude Code runner, interactive features |
 | `runners/gemini.py` | Gemini CLI runner |
 | `runners/amp.py` | AMP CLI runner (Sourcegraph) |
-| `runner_bridge.py` | Connects runners to Telegram presenter, injects agent preamble |
+| `runner_bridge.py` | Connects runners to Telegram presenter, injects agent preamble, auto-continue with signal death suppression |
 | `cost_tracker.py` | Per-run/daily cost tracking and budget alerts |
 | `commands/claude_control.py` | Approve/Deny/Discuss callback handler |
 | `commands/dispatch.py` | Callback dispatch and command routing |
@@ -160,7 +160,7 @@ Key test files:
 
 - `test_claude_control.py` — 89 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
 - `test_callback_dispatch.py` — 26 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
-- `test_exec_bridge.py` — 128 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel with CPU-active suppression (sleeping-process aware), tool-active repeat suppression, approval-aware stall threshold, MCP tool stall threshold, frozen ring buffer hung escalation, session summary, PID/stream threading, auto-continue detection
+- `test_exec_bridge.py` — 140 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel with CPU-active suppression (sleeping-process aware), tool-active repeat suppression, approval-aware stall threshold, MCP tool stall threshold, frozen ring buffer hung escalation, session summary, PID/stream threading, auto-continue detection, signal death suppression
 - `test_ask_user_question.py` — 29 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
 - `test_diff_preview.py` — 14 tests: Edit diff display, Write content preview, Bash command display, line/char truncation
 - `test_cost_tracker.py` — 12 tests: cost accumulation, per-run/daily budget thresholds, warning levels, daily reset, auto-cancel flag
