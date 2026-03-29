@@ -52,13 +52,7 @@ assert all(isinstance(e, ActionEvent) for e in events[1:-1])
 
 ## Integration testing (MANDATORY before releases)
 
-Unit tests cover code paths but NOT live Telegram interaction. Before every version bump, run the structured integration test suite against `@untether_dev_bot`. See `docs/reference/integration-testing.md` for the full playbook.
-
-- **Patch**: Tier 7 (command smoke) + Tier 1 (affected engine + Claude) + relevant Tier 6
-- **Minor**: Tier 7 + Tier 1 (all 6 engines) + Tier 2 (Claude interactive) + relevant Tier 3-4 + Tier 6 + upgrade path
-- **Major**: ALL tiers (1-7), ALL engines, full upgrade path
-
-**NEVER use `@hetz_lba1_bot` (staging) for initial dev testing. ALWAYS use `@untether_dev_bot` first.** Stage rc versions on `@hetz_lba1_bot` only after dev integration tests pass.
+Unit tests cover code paths but NOT live Telegram interaction. Before every version bump, run integration tests against `@untether_dev_bot`. See `docs/reference/integration-testing.md` for the full playbook and `.claude/rules/release-discipline.md` for tier requirements per release type.
 
 ## Integration testing via Telegram MCP
 
@@ -68,12 +62,12 @@ Integration tests are automated via Telegram MCP tools by Claude Code during the
 
 | Chat | Chat ID |
 |------|---------|
-| `ut-dev: claude` | 5284581592 |
-| `ut-dev: codex` | 4929463515 |
-| `ut-dev: opencode` | 5200822877 |
-| `ut-dev: pi` | 5156256333 |
-| `ut-dev: gemini` | 5207762142 |
-| `ut-dev: amp` | 5230875989 |
+| `ut-dev-hf: claude` | 5171122044 |
+| `ut-dev-hf: codex` | 5116709786 |
+| `ut-dev-hf: opencode` | 5020138767 |
+| `ut-dev-hf: pi` | 5276373372 |
+| `ut-dev-hf: gemini` | 5152406011 |
+| `ut-dev-hf: amp` | 5064468679 |
 
 ### Pattern
 
