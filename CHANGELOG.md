@@ -56,6 +56,7 @@
   - `process`: orphaned children survive across restarts, accumulating memory (#88)
   - `control-group`: kills all processes simultaneously, bypassing drain (#166)
   - `mixed`: best of both — graceful drain then forced cleanup
+- AMP CLI `-x` flag regression — double-dash separator in `build_args()` caused AMP to interpret `-x` as a subcommand name instead of a flag, breaking execute mode for all prompts [#245](https://github.com/littlebearapps/untether/issues/245)
 
 ### docs
 
@@ -66,7 +67,8 @@
 
 - logging audit: fill gaps in structlog coverage — elevate settings loader failures from DEBUG to WARNING (footer, watchdog, auto-continue, preamble), add access control drop logging, add executor `handle.engine_resolved` info log, elevate outline cleanup failures to WARNING, add credential redaction for OpenAI/GitHub API keys, add file transfer success logging, bind `session_id` in structlog context vars, add media group/cost tracker/cancel debug logging [#254](https://github.com/littlebearapps/untether/issues/254)
 - CI: expand ruff lint rules from 7 to 18 — add ASYNC, LOG, I (isort), PT, RET, RUF (full), FURB, PIE, FLY, FA, ISC rule sets; auto-fix 42 import sorts, clean 73 stale noqa directives, fix unused vars and useless conditionals; per-file ignores for test-specific patterns [#255](https://github.com/littlebearapps/untether/issues/255)
-- Gemini: default to `--approval-mode yolo` (full access) when no override is set — headless mode has no interactive approval path, so the CLI's read-only default disabled write tools entirely, causing multi-minute stalls as Gemini cascaded through sub-agents [#244](https://github.com/littlebearapps/untether/issues/244)
+- Gemini: default to `--approval-mode yolo` (full access) when no override is set — headless mode has no interactive approval path, so the CLI's read-only default disabled write tools entirely, causing multi-minute stalls as Gemini cascaded through sub-agents [#244](https://github.com/littlebearapps/untether/issues/244), [#248](https://github.com/littlebearapps/untether/issues/248)
+- expand error hints coverage — add model not found, context length exceeded, authentication, content safety, CLI not installed, SSL/TLS, invalid request, disk/permission, AMP-specific auth, Gemini result status, and account suspension error categories [#246](https://github.com/littlebearapps/untether/issues/246)
 - `/continue` command — cross-environment resume; pick up the most recent CLI session from Telegram using each engine's native continue flag (`--continue`, `resume --last`, `--resume latest`); supported for Claude, Codex, OpenCode, Pi, Gemini (not AMP) [#135](https://github.com/littlebearapps/untether/issues/135)
   - `ResumeToken` extended with `is_continue: bool = False`
   - all 6 runners' `build_args()` updated to handle continue tokens
