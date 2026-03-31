@@ -2,7 +2,8 @@ from untether.model import ResumeToken
 from untether.runners.claude import ClaudeRunner
 from untether.runners.codex import CodexRunner
 from untether.runners.opencode import OpenCodeRunner, OpenCodeStreamState
-from untether.runners.pi import ENGINE as PI_ENGINE, PiRunner, PiStreamState
+from untether.runners.pi import ENGINE as PI_ENGINE
+from untether.runners.pi import PiRunner, PiStreamState
 from untether.runners.run_options import EngineRunOptions, apply_run_options
 
 
@@ -19,6 +20,8 @@ def test_codex_run_options_override_model_and_reasoning() -> None:
         "gpt-4.1-mini",
         "-c",
         "model_reasoning_effort=low",
+        "--ask-for-approval",
+        "never",
         "exec",
         "--json",
         "--skip-git-repo-check",

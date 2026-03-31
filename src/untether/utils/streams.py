@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-import sys
 from typing import Any
 
 import anyio
@@ -10,12 +9,14 @@ from anyio.streams.buffered import BufferedByteReceiveStream
 
 from ..logging import log_pipeline
 
+_MAX_LINE_BYTES = 10 * 1024 * 1024  # 10 MB — generous for any legitimate JSONL event
+
 
 async def iter_bytes_lines(stream: ByteReceiveStream) -> AsyncIterator[bytes]:
     buffered = BufferedByteReceiveStream(stream)
     while True:
         try:
-            line = await buffered.receive_until(b"\n", sys.maxsize)
+            line = await buffered.receive_until(b"\n", _MAX_LINE_BYTES)
         except (anyio.IncompleteRead, anyio.ClosedResourceError):
             return
         yield line

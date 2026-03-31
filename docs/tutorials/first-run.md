@@ -16,16 +16,26 @@ untether
 Untether keeps running in your terminal. In Telegram, your bot will post a startup message like:
 
 !!! untether "Untether"
-    🐕 untether v0.34.0 is ready
+    🐕 untether (v0.35.0)
 
-    engine: `codex` · projects: `3`<br>
-    working in: /Users/you/dev/your-project
+    *default engine:* `codex`<br>
+    *installed engines:* claude, codex, opencode<br>
+    *directories:* 3<br>
+    mode: assistant
 
-The message is compact by default — diagnostic lines only appear when they carry signal (e.g. `mode: chat` when in chat mode, or engine issues). This tells you:
+    Send a message to start, or /config for settings.
+
+    📖 Click here for help | 🐛 Click here to report a bug
+
+The message is compact by default — diagnostic lines only appear when they carry signal. This tells you:
 
 - Which engine is the default and how many projects are registered
 - Which directory Untether will run in
+- Which **workflow mode** you're in (`assistant`, `workspace`, or `handoff`)
 - Any engine issues (missing, misconfigured) when relevant
+
+!!! tip "What mode am I in?"
+    The startup message shows `mode: assistant`, `mode: workspace`, or `mode: handoff`. This determines how conversations continue — assistant auto-resumes, workspace uses forum topics, and handoff shows resume lines for terminal use. See [Choose a workflow mode](../how-to/choose-a-mode.md) for details.
 
 !!! note "Untether runs where you start it"
     The agent will see files in your current directory. If you want to work on a different repo, stop Untether (`Ctrl+C`) and restart it in that directory—or set up [projects](projects-and-branches.md) to switch repos from chat.
@@ -101,7 +111,7 @@ Untether extracts the resume token from the message you replied to and continues
     Use `show_resume_line = true` if you want this behavior all the time.
 
 !!! tip "Reset with /new"
-    `/new` clears stored sessions for the current chat or topic.
+    `/new` cancels any running task and clears stored sessions for the current chat or topic.
 
 ## 6. Cancel a run
 

@@ -54,8 +54,8 @@ If you expect to edit config while Untether is running, set:
 | `voice_transcription_model` | string | `"gpt-4o-mini-transcribe"` | OpenAI transcription model name. |
 | `voice_transcription_base_url` | string\|null | `null` | Override base URL for voice transcription only. |
 | `voice_transcription_api_key` | string\|null | `null` | Override API key for voice transcription only. |
-| `session_mode` | `"stateless"`\|`"chat"` | `"stateless"` | Auto-resume mode. Onboarding sets `"chat"` for assistant/workspace. |
-| `show_resume_line` | bool | `true` | Show resume line in message footer. Onboarding sets `false` for assistant/workspace. |
+| `session_mode` | `"stateless"`\|`"chat"` | `"stateless"` | Auto-resume mode. See [workflow modes](modes.md) — `"chat"` for assistant/workspace, `"stateless"` for handoff. |
+| `show_resume_line` | bool | `true` | Show resume line in message footer. See [workflow modes](modes.md) — `false` for assistant/workspace, `true` for handoff. |
 
 When `allowed_user_ids` is set, updates without a sender id (for example, some channel posts) are ignored.
 
@@ -232,6 +232,8 @@ Budget alerts always appear regardless of `[footer]` settings.
     liveness_timeout = 600.0
     stall_auto_kill = false
     stall_repeat_seconds = 180.0
+    tool_timeout = 600.0
+    mcp_tool_timeout = 900.0
     ```
 
 | Key | Type | Default | Notes |
@@ -239,8 +241,29 @@ Budget alerts always appear regardless of `[footer]` settings.
 | `liveness_timeout` | float | `600.0` | Seconds of no stdout before `subprocess.liveness_stall` warning (60–3600). |
 | `stall_auto_kill` | bool | `false` | Auto-kill stalled processes. Requires zero TCP + CPU not increasing. |
 | `stall_repeat_seconds` | float | `180.0` | Interval between repeat stall warnings in Telegram (30–600). |
+| `tool_timeout` | float | `600.0` | Stall threshold (seconds) for running local tool calls like Bash, Read, Write (60–7200). Increase for long builds or benchmarks. |
+| `mcp_tool_timeout` | float | `900.0` | Stall threshold (seconds) for running MCP tool calls (60–7200). MCP tools are network-bound and may legitimately run for 10–20+ minutes. |
 
-The stall monitor in `ProgressEdits` fires at 5 min (300s) idle with progressive Telegram notifications. The liveness watchdog in the subprocess layer fires at `liveness_timeout` with `/proc` diagnostics. When `stall_auto_kill` is enabled, auto-kill requires a triple safety gate: timeout exceeded + zero TCP connections + CPU ticks not increasing between snapshots.
+The stall monitor in `ProgressEdits` fires at 5 min (300s) idle, 10 min for local tools, 15 min for MCP tools, and 30 min for pending approvals. When a local tool is running and the child process is CPU-active, the first stall warning fires but repeat warnings are suppressed — they resume if CPU goes idle (indicating a genuinely stuck tool). The liveness watchdog in the subprocess layer fires at `liveness_timeout` with `/proc` diagnostics. When `stall_auto_kill` is enabled, auto-kill requires a triple safety gate: timeout exceeded + zero TCP connections + CPU ticks not increasing between snapshots.
+
+### `[auto_continue]`
+
+Auto-continue detects when Claude Code exits after receiving tool results without processing them (upstream bugs [#34142](https://github.com/anthropics/claude-code/issues/34142), [#30333](https://github.com/anthropics/claude-code/issues/30333)) and automatically resumes the session. Detection is based on a protocol invariant: normal sessions always end with `last_event_type=result`, while premature exits show `last_event_type=user`.
+
+Auto-continue is suppressed on signal deaths (rc=143/SIGTERM, rc=137/SIGKILL) to prevent death spirals under memory pressure.
+
+=== "toml"
+
+    ```toml
+    [auto_continue]
+    enabled = true
+    max_retries = 1
+    ```
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `enabled` | bool | `true` | Enable automatic session continuation for Claude Code. |
+| `max_retries` | int | `1` | Maximum consecutive auto-continue attempts per run (1–5). |
 
 ## Engine-specific config tables
 

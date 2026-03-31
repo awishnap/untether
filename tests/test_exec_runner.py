@@ -1,8 +1,7 @@
-import anyio
-
-import pytest
-
 from collections.abc import AsyncIterator
+
+import anyio
+import pytest
 
 from untether.model import (
     ActionEvent,
@@ -48,7 +47,7 @@ async def test_run_serializes_same_session() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", token)
         tg.start_soon(drain, "b", token)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
         gate.set()
     assert max_in_flight == 1
 
@@ -84,7 +83,7 @@ async def test_run_allows_parallel_new_sessions() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", None)
         tg.start_soon(drain, "b", None)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
         gate.set()
     assert max_in_flight == 2
 
@@ -122,7 +121,7 @@ async def test_run_allows_parallel_different_sessions() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", token_a)
         tg.start_soon(drain, "b", token_b)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
         gate.set()
     assert max_in_flight == 2
 
@@ -137,6 +136,8 @@ def test_codex_exec_flags_after_exec() -> None:
     assert args == [
         "-c",
         "notify=[]",
+        "--ask-for-approval",
+        "never",
         "exec",
         "--json",
         "--skip-git-repo-check",
@@ -635,6 +636,7 @@ def test_jsonl_stream_state_defaults() -> None:
     assert stream.event_count == 0
     assert len(stream.recent_events) == 0
     assert stream.stderr_capture == []
+    assert stream.proc_returncode is None
 
 
 def test_jsonl_stream_state_recent_events_ring_buffer() -> None:
@@ -680,8 +682,8 @@ def test_resume_line_proxy_current_stream_none() -> None:
 
 def test_resume_line_proxy_current_stream_no_attr() -> None:
     """_ResumeLineProxy.current_stream returns None for runners without the attr."""
-    from untether.telegram.commands.executor import _ResumeLineProxy
     from untether.runners.mock import MockRunner
+    from untether.telegram.commands.executor import _ResumeLineProxy
 
     runner = MockRunner(engine="mock")
     proxy = _ResumeLineProxy(runner=runner)

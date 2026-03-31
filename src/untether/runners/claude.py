@@ -13,6 +13,7 @@ import os
 import pty
 import re
 import shutil
+import subprocess as subprocess_module
 import time
 import tty
 from collections.abc import AsyncIterator
@@ -29,29 +30,27 @@ from ..logging import get_logger
 from ..model import (
     Action,
     ActionKind,
+    CompletedEvent,
     EngineId,
     ResumeToken,
     StartedEvent,
     UntetherEvent,
-    CompletedEvent,
 )
 from ..runner import (
+    JsonlStreamState,
     JsonlSubprocessRunner,
     ResumeTokenMixin,
     Runner,
-    JsonlStreamState,
     _rc_label,
     _session_label,
     _stderr_excerpt,
 )
-from .run_options import get_run_options
 from ..schemas import claude as claude_schema
-from .tool_actions import tool_input_path, tool_kind_and_title
 from ..utils.paths import get_run_base_dir
 from ..utils.streams import drain_stderr
 from ..utils.subprocess import manage_subprocess
-
-import subprocess as subprocess_module
+from .run_options import get_run_options
+from .tool_actions import tool_input_path, tool_kind_and_title
 
 logger = get_logger(__name__)
 
@@ -157,6 +156,8 @@ class ClaudeStreamState:
     last_tool_use_id: str | None = None
     # Map tool_use_id -> control action_id for completing control actions on tool result
     control_action_for_tool: dict[str, str] = field(default_factory=dict)
+    # Map request_id -> action_id for reconciling callback-handled requests (#229)
+    request_to_action: dict[str, str] = field(default_factory=dict)
     # Auto-approve ExitPlanMode when permission_mode is "auto"
     auto_approve_exit_plan_mode: bool = False
     # Whether this run is a resume (for error diagnostics)
@@ -729,12 +730,18 @@ def translate_claude_event(
                                         "buttons": [
                                             [
                                                 {
-                                                    "text": "Approve Plan",
+                                                    "text": "✅ Approve Plan",
                                                     "callback_data": f"claude_control:approve:{button_request_id}",
                                                 },
                                                 {
-                                                    "text": "Deny",
+                                                    "text": "❌ Deny",
                                                     "callback_data": f"claude_control:deny:{button_request_id}",
+                                                },
+                                            ],
+                                            [
+                                                {
+                                                    "text": "💬 Let's discuss",
+                                                    "callback_data": f"claude_control:chat:{button_request_id}",
                                                 },
                                             ],
                                         ]
@@ -802,6 +809,43 @@ def translate_claude_event(
                     session_id=session_id,
                 )
 
+            # Reconcile requests that were handled via Telegram callback.
+            # send_claude_control_response() can't access state, so it marks
+            # handled requests in _HANDLED_REQUESTS.  We reconcile here to:
+            # 1. Remove from pending (prevents spurious expired_auto_deny)
+            # 2. Emit action_completed to clear stale inline keyboards
+            # See: https://github.com/littlebearapps/untether/issues/229
+            reconciled_events: list[UntetherEvent] = []
+            callback_handled = [
+                rid
+                for rid in state.pending_control_requests
+                if rid in _HANDLED_REQUESTS
+            ]
+            for rid in callback_handled:
+                del state.pending_control_requests[rid]
+                action_id_for_req = state.request_to_action.pop(rid, None)
+                if action_id_for_req:
+                    # Remove from control_action_for_tool so tool_result
+                    # doesn't try to complete it again
+                    state.control_action_for_tool = {
+                        k: v
+                        for k, v in state.control_action_for_tool.items()
+                        if v != action_id_for_req
+                    }
+                    reconciled_events.append(
+                        factory.action_completed(
+                            action_id=action_id_for_req,
+                            kind="warning",
+                            title="Permission resolved",
+                            ok=True,
+                        )
+                    )
+                logger.debug(
+                    "control_request.reconciled",
+                    request_id=rid,
+                    action_id=action_id_for_req,
+                )
+
             # Clean up expired requests (older than timeout).
             # Send auto-deny to unblock the subprocess — without this,
             # Claude Code blocks forever waiting for a response that never comes.
@@ -811,11 +855,13 @@ def translate_claude_event(
                 rid
                 for rid, (_, timestamp) in state.pending_control_requests.items()
                 if current_time - timestamp > CONTROL_REQUEST_TIMEOUT_SECONDS
+                and rid not in _HANDLED_REQUESTS  # belt-and-suspenders (#229)
             ]
             for rid in expired:
                 del state.pending_control_requests[rid]
                 _REQUEST_TO_INPUT.pop(rid, None)
                 _REQUEST_TO_TOOL_NAME.pop(rid, None)
+                state.request_to_action.pop(rid, None)
                 state.auto_deny_queue.append(
                     (rid, "Request timed out — no response from user within 5 minutes.")
                 )
@@ -834,16 +880,18 @@ def translate_claude_event(
             # Map the preceding tool_use_id to this control action for cleanup
             if state.last_tool_use_id:
                 state.control_action_for_tool[state.last_tool_use_id] = action_id
+            # Map request_id -> action_id for reconciling callback-handled requests (#229)
+            state.request_to_action[request_id] = action_id
 
             # Include inline keyboard data in detail
             button_rows: list[list[dict[str, str]]] = [
                 [
                     {
-                        "text": "Approve",
+                        "text": "✅ Approve",
                         "callback_data": f"claude_control:approve:{request_id}",
                     },
                     {
-                        "text": "Deny",
+                        "text": "❌ Deny",
                         "callback_data": f"claude_control:deny:{request_id}",
                     },
                 ],
@@ -855,7 +903,7 @@ def translate_claude_event(
                     button_rows.append(
                         [
                             {
-                                "text": "Pause & Outline Plan",
+                                "text": "📋 Pause & Outline Plan",
                                 "callback_data": f"claude_control:discuss:{request_id}",
                             },
                         ]
@@ -959,12 +1007,13 @@ def translate_claude_event(
                 detail["ask_question"] = ask_question
 
             return [
+                *reconciled_events,
                 factory.action_started(
                     action_id=action_id,
                     kind="warning",  # Use warning kind for visibility
                     title=warning_text,
                     detail=detail,
-                )
+                ),
             ]
         case _:
             logger.debug(
@@ -1937,6 +1986,11 @@ def _cleanup_session_registries(session_id: str) -> None:
     if session_id in _OUTLINE_PENDING:
         cleaned.append("outline_pending")
     _OUTLINE_PENDING.discard(session_id)
+    # Clean up discuss feedback ref (post-outline edit-instead-of-send tracking)
+    from ..telegram.commands.claude_control import _DISCUSS_FEEDBACK_REFS
+
+    if _DISCUSS_FEEDBACK_REFS.pop(session_id, None) is not None:
+        cleaned.append("discuss_feedback_ref")
     stale = [k for k, v in _REQUEST_TO_SESSION.items() if v == session_id]
     if stale:
         cleaned.append(f"requests({len(stale)})")

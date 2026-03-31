@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="#-quick-start">Quick Start</a> · <a href="#-features">Features</a> · <a href="#-supported-engines">Engines</a> · <a href="#-commands">Commands</a> · <a href="#-contributing">Contributing</a>
+  <a href="#-quick-start">Quick Start</a> · <a href="#-features">Features</a> · <a href="#-supported-engines">Engines</a> · <a href="#-help-guides">Guides</a> · <a href="#-commands">Commands</a> · <a href="#-contributing">Contributing</a>
 </p>
 
 ---
@@ -65,7 +65,19 @@ The wizard creates a Telegram bot, picks your workflow, and connects your chat. 
 
 That's it. Your agent runs on your machine, streams progress to Telegram, and you can reply to continue the conversation.
 
+The wizard offers three **workflow modes** — pick the one that fits:
+
+| Mode | How it works |
+|------|-------------|
+| **Assistant** | Ongoing chat — messages auto-resume your session. `/new` to start fresh. |
+| **Workspace** | Forum topics — each topic bound to a project/branch with independent sessions. |
+| **Handoff** | Reply-to-continue — resume lines shown for copying to terminal. |
+
+[Choose a mode →](https://untether.littlebearapps.com/how-to/choose-a-mode/) · [Conversation modes tutorial →](https://untether.littlebearapps.com/tutorials/conversation-modes/)
+
 **Tip:** Already have a bot token? Pass it directly: `untether --bot-token YOUR_TOKEN`
+
+📖 See our [help guides](#-help-guides) for detailed setup, engine configuration, and troubleshooting.
 
 ---
 
@@ -79,7 +91,9 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 - 💡 **Actionable error hints** — friendly messages for API outages, rate limits, billing errors, and network failures with resume guidance
 - 🏷 **Model and mode metadata** — every completed message shows model with version, effort level, and permission mode (e.g. `🏷 opus 4.6 · medium · plan`) across all engines
 - 🎙️ **Voice notes** — hands full? Dictate tasks instead of typing; Untether transcribes via a configurable Whisper-compatible endpoint
-- 📎 **File transfer** — upload files to your repo, download results back, or let agents send files to you automatically via `.untether-outbox/`
+- 🔄 **Cross-environment resume** — start a session in your terminal, pick it up from Telegram with `/continue`; works with Claude Code, Codex, OpenCode, Pi, and Gemini ([guide](docs/how-to/cross-environment-resume.md))
+- 📎 **File transfer** — upload files to your repo with `/file put`, download with `/file get`; agents can also deliver files automatically by writing to `.untether-outbox/` during a run — sent as Telegram documents on completion
+- 🛡️ **Graceful recovery** — orphan progress messages cleaned up on restart; stall detection with CPU-aware diagnostics; auto-continue for Claude Code sessions that exit prematurely
 - ⏰ **Scheduled tasks** — cron expressions and webhook triggers
 - 💬 **Forum topics** — map Telegram topics to projects and branches
 - 📤 **Session export** — `/export` for markdown or JSON transcripts
@@ -88,7 +102,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 - 🧩 **Plugin system** — extend with custom engines, transports, and commands
 - 🔌 **Plugin-compatible** — Claude Code plugins detect Untether sessions via `UNTETHER_SESSION` env var, preventing hooks from interfering with Telegram output; works with [PitchDocs](https://github.com/littlebearapps/lba-plugins) and other Claude Code plugins
 - 📊 **Session statistics** — `/stats` shows per-engine run counts, action totals, and duration across today, this week, and all time
-- 💬 **Conversation modes** — pick the style that fits how you work: assistant (ongoing chat), workspace (forum topics per project), or handoff (reply-to-continue with terminal resume)
+- 💬 **Three workflow modes** — **assistant** (ongoing chat with auto-resume), **workspace** (forum topics bound to projects/branches), or **handoff** (reply-to-continue with terminal resume lines); [choose a mode](https://untether.littlebearapps.com/how-to/choose-a-mode/) to match your workflow
 
 ---
 
@@ -112,7 +126,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 | **Progress streaming** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Session resume** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Model override** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ |
-| **Model in footer** | ✅ | — | — | — | ✅ | — |
+| **Model in footer** | ✅ | ✅ | ✅ | — | ✅ | — |
 | **Approval mode in footer** | ✅ | ~⁴ | — | — | ~² | — |
 | **Voice input** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Verbose progress** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -133,7 +147,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 | **Cross-env resume (`/continue`)** | ✅ | ✅ | ✅ | ✅⁵ | ✅ | —⁶ |
 
 ¹ Amp model override maps to `--mode` (deep/free/rush/smart).
-² Toggle via `/config` between read-only (default), edit files (`--approval-mode=auto_edit`, files OK but no shell), and full access (`--approval-mode=yolo`); pre-run policy, not interactive mid-run approval.
+² Defaults to full access (`--approval-mode=yolo`, all tools auto-approved); toggle via `/config` to edit files (`auto_edit`, files OK but no shell) or read-only; pre-run policy, not interactive mid-run approval.
 ³ Token usage counts only — no USD cost reporting.
 ⁴ Toggle via `/config` between full auto (default) and safe (`--ask-for-approval=untrusted`, untrusted tools blocked); pre-run policy, not interactive mid-run approval.
 ⁵ Pi requires `provider = "openai-codex"` in engine config for OAuth subscriptions in headless mode.
@@ -152,7 +166,7 @@ That's it. Your agent runs on your machine, streams progress to Telegram, and yo
 | `/usage` | Show API costs for the current session |
 | `/export` | Export session transcript |
 | `/browse` | Browse project files |
-| `/new` | Clear stored sessions |
+| `/new` | Cancel running tasks and clear stored sessions |
 | `/continue` | Resume the most recent CLI session in this project ([guide](docs/how-to/cross-environment-resume.md)) |
 | `/file put/get` | Transfer files |
 | `/topic` | Create or bind forum topics |
@@ -232,41 +246,45 @@ untether                         # start (or restart — Ctrl+C first if already
 
 ---
 
-## 📖 Engine guides
-
-Detailed setup and usage for each engine:
-
-- [Claude Code guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/claude/runner.md) — permission modes, plan mode, cost tracking, interactive approvals
-- [Codex guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/codex/exec-json-cheatsheet.md) — profiles, extra args, exec mode
-- [OpenCode guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/opencode/runner.md) — model selection, 75+ providers, local models
-- [Pi guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/pi/runner.md) — multi-provider auth, model and provider selection
-- [Gemini CLI guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/gemini/runner.md) — Google Gemini models, approval mode passthrough
-- [Amp guide](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/amp/runner.md) — mode selection, thread management
-- [Configuration reference](https://github.com/littlebearapps/untether/blob/master/docs/reference/config.md) — full walkthrough of `untether.toml`
-- [Troubleshooting guide](https://github.com/littlebearapps/untether/blob/master/docs/how-to/troubleshooting.md) — common issues and solutions
-
----
-
-## 📚 Documentation
+## 📖 Help Guides
 
 Full documentation is available in the [`docs/`](https://github.com/littlebearapps/untether/tree/master/docs) directory.
 
+### Getting Started
+
 - [Install and onboard](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/install.md) — setup wizard walkthrough
 - [First run](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/first-run.md) — send your first task
+- [Conversation modes](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/conversation-modes.md) — assistant, workspace, and handoff
+- [Projects and branches](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/projects-and-branches.md) — multi-repo workflows
+- [Multi-engine workflows](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/multi-engine.md) — switching between agents
+
+### How-To Guides
+
 - [Interactive approval](https://github.com/littlebearapps/untether/blob/master/docs/how-to/interactive-approval.md) — approve and deny tool calls from Telegram
 - [Plan mode](https://github.com/littlebearapps/untether/blob/master/docs/how-to/plan-mode.md) — control plan transitions and progressive cooldown
 - [Cost budgets](https://github.com/littlebearapps/untether/blob/master/docs/how-to/cost-budgets.md) — per-run and daily budget limits
-- [Webhooks and cron](https://github.com/littlebearapps/untether/blob/master/docs/how-to/webhooks-and-cron.md) — automated runs from external events
-- [Projects and branches](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/projects-and-branches.md) — multi-repo workflows
-- [Multi-engine workflows](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/multi-engine.md) — switching between agents
 - [Inline settings](https://github.com/littlebearapps/untether/blob/master/docs/how-to/inline-settings.md) — `/config` button menu
-- [Verbose progress](https://github.com/littlebearapps/untether/blob/master/docs/how-to/verbose-progress.md) — tool detail display
 - [Voice notes](https://github.com/littlebearapps/untether/blob/master/docs/how-to/voice-notes.md) — dictate tasks from your phone
 - [File browser](https://github.com/littlebearapps/untether/blob/master/docs/how-to/browse-files.md) — `/browse` inline navigation
 - [Session export](https://github.com/littlebearapps/untether/blob/master/docs/how-to/export-sessions.md) — markdown and JSON transcripts
+- [Verbose progress](https://github.com/littlebearapps/untether/blob/master/docs/how-to/verbose-progress.md) — tool detail display
 - [Group chats](https://github.com/littlebearapps/untether/blob/master/docs/how-to/group-chat.md) — multi-user and trigger modes
 - [Context binding](https://github.com/littlebearapps/untether/blob/master/docs/how-to/context-binding.md) — per-chat project/branch binding
-- [Conversation modes](https://github.com/littlebearapps/untether/blob/master/docs/tutorials/conversation-modes.md) — assistant, workspace, and handoff
+- [Webhooks and cron](https://github.com/littlebearapps/untether/blob/master/docs/how-to/webhooks-and-cron.md) — automated runs from external events
+
+### Engine Guides
+
+- [Claude Code](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/claude/runner.md) — permission modes, plan mode, cost tracking, interactive approvals
+- [Codex](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/codex/exec-json-cheatsheet.md) — profiles, extra args, exec mode
+- [OpenCode](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/opencode/runner.md) — model selection, 75+ providers, local models
+- [Pi](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/pi/runner.md) — multi-provider auth, model and provider selection
+- [Gemini CLI](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/gemini/runner.md) — Google Gemini models, approval mode passthrough
+- [Amp](https://github.com/littlebearapps/untether/blob/master/docs/reference/runners/amp/runner.md) — mode selection, thread management
+
+### Reference
+
+- [Configuration reference](https://github.com/littlebearapps/untether/blob/master/docs/reference/config.md) — full walkthrough of `untether.toml`
+- [Troubleshooting](https://github.com/littlebearapps/untether/blob/master/docs/how-to/troubleshooting.md) — common issues and solutions
 - [Architecture](https://github.com/littlebearapps/untether/blob/master/docs/explanation/architecture.md) — how the pieces fit together
 
 ---

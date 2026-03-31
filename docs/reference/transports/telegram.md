@@ -148,11 +148,12 @@ Configuration (under `[transports.telegram]`):
     media_group_debounce_s = 1.0 # set 0 to disable the delay
     ```
 
-## Chat sessions (optional)
+## Chat sessions
 
-If you chose the **handoff** workflow during onboarding, Untether uses stateless mode
-where you reply to continue a session. The **assistant** and **workspace** workflows
-use chat mode with auto-resume enabled.
+Session mode determines how conversations continue — this is the core difference between the three [workflow modes](../modes.md):
+
+- **Assistant / Workspace** (`session_mode = "chat"`) — auto-resume; messages continue the last session automatically
+- **Handoff** (`session_mode = "stateless"`) — reply-to-continue; each message starts a new run unless you reply to a previous one
 
 Configuration (under `[transports.telegram]`):
 
@@ -205,7 +206,10 @@ trimming instead:
 Split mode sends multiple messages. Each chunk includes the footer; follow-up
 chunks add a "continued (N/M)" header.
 
-## Forum topics (optional)
+## Forum topics (workspace mode)
+
+!!! info "Mode requirement"
+    Forum topics are used by **workspace mode** only. Assistant and handoff modes don't use topics. See [Workflow modes](../modes.md) for the full comparison.
 
 If you chose the **workspace** workflow during onboarding, topics are already enabled.
 Topics bind Telegram forum threads to a project/branch and persist resume tokens per
@@ -245,7 +249,7 @@ Commands:
   project chats.
 - `/ctx` shows the bound context and stored session engines inside topics.
   Outside topics, `/ctx set ...` and `/ctx clear` bind the chat context.
-- `/new` inside a topic clears stored resume tokens for that topic.
+- `/new` inside a topic cancels any running task and clears stored resume tokens for that topic.
 
 State is stored in `telegram_topics_state.json` alongside the config file.
 Delete it to reset all topic bindings and stored sessions.

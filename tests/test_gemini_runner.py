@@ -255,9 +255,8 @@ def test_build_args_new_session() -> None:
     assert "--output-format" in args
     assert "stream-json" in args
     assert "--resume" not in args
-    # -p takes the prompt as its argument (Gemini CLI >= 0.32.0)
-    p_idx = args.index("-p")
-    assert args[p_idx + 1] == "hello world"
+    # --prompt= binds the value directly to avoid yargs flag injection
+    assert "--prompt=hello world" in args
 
 
 def test_build_args_with_resume() -> None:
@@ -352,11 +351,13 @@ def test_build_args_approval_mode_from_run_options() -> None:
     assert "plan" in args
 
 
-def test_build_args_no_approval_mode_by_default() -> None:
+def test_build_args_defaults_to_yolo_approval_mode() -> None:
     runner = GeminiRunner()
     state = GeminiStreamState()
     args = runner.build_args("hello", None, state=state)
-    assert "--approval-mode" not in args
+    assert "--approval-mode" in args
+    idx = args.index("--approval-mode")
+    assert args[idx + 1] == "yolo"
 
 
 def test_orphan_tool_result_ignored() -> None:

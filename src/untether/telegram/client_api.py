@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol, TypeVar
 
 import httpx
@@ -9,6 +10,14 @@ from ..logging import get_logger
 from .api_models import Chat, ChatMember, File, ForumTopic, Message, Update, User
 
 logger = get_logger(__name__)
+
+_BOT_TOKEN_RE = re.compile(r"/bot[^/]+/")
+
+
+def _safe_url(url: object) -> str:
+    """Sanitise a Telegram Bot API URL for logging (strip bot token)."""
+    return _BOT_TOKEN_RE.sub("/bot***/", str(url))
+
 
 T = TypeVar("T")
 
@@ -157,7 +166,7 @@ class HttpBotClient:
             logger.error(
                 "telegram.invalid_payload",
                 method=method,
-                url=str(resp.request.url),
+                url=_safe_url(resp.request.url),
                 payload=payload,
             )
             return None
@@ -169,14 +178,14 @@ class HttpBotClient:
                 logger.warning(
                     "telegram.rate_limited",
                     method=method,
-                    url=str(resp.request.url),
+                    url=_safe_url(resp.request.url),
                     retry_after=retry_after,
                 )
                 raise TelegramRetryAfter(retry_after)
             logger.error(
                 "telegram.api_error",
                 method=method,
-                url=str(resp.request.url),
+                url=_safe_url(resp.request.url),
                 payload=payload,
             )
             return None
@@ -208,11 +217,11 @@ class HttpBotClient:
                     f"{self._base}/{method}", data=data, files=files, **timeout_kwargs
                 )
         except httpx.HTTPError as exc:
-            url = getattr(exc.request, "url", None)
+            exc_url = getattr(exc.request, "url", None)
             logger.error(
                 "telegram.network_error",
                 method=method,
-                url=str(url) if url is not None else None,
+                url=_safe_url(exc_url) if exc_url is not None else None,
                 error=str(exc),
                 error_type=exc.__class__.__name__,
             )
@@ -239,7 +248,7 @@ class HttpBotClient:
                     "telegram.rate_limited",
                     method=method,
                     status=resp.status_code,
-                    url=str(resp.request.url),
+                    url=_safe_url(resp.request.url),
                     retry_after=retry_after,
                 )
                 raise TelegramRetryAfter(retry_after) from exc
@@ -248,7 +257,7 @@ class HttpBotClient:
                 "telegram.http_error",
                 method=method,
                 status=resp.status_code,
-                url=str(resp.request.url),
+                url=_safe_url(resp.request.url),
                 error=str(exc),
                 body=body,
             )
@@ -262,7 +271,7 @@ class HttpBotClient:
                 "telegram.bad_response",
                 method=method,
                 status=resp.status_code,
-                url=str(resp.request.url),
+                url=_safe_url(resp.request.url),
                 error=str(exc),
                 error_type=exc.__class__.__name__,
                 body=body,
@@ -351,7 +360,7 @@ class HttpBotClient:
             request_url = getattr(exc.request, "url", None)
             logger.error(
                 "telegram.file_network_error",
-                url=str(request_url) if request_url is not None else None,
+                url=_safe_url(request_url) if request_url is not None else None,
                 error=str(exc),
                 error_type=exc.__class__.__name__,
             )
@@ -377,7 +386,7 @@ class HttpBotClient:
                     "telegram.rate_limited",
                     method="download_file",
                     status=resp.status_code,
-                    url=str(resp.request.url),
+                    url=_safe_url(resp.request.url),
                     retry_after=retry_after,
                 )
                 raise TelegramRetryAfter(retry_after) from exc
@@ -385,7 +394,7 @@ class HttpBotClient:
             logger.error(
                 "telegram.file_http_error",
                 status=resp.status_code,
-                url=str(resp.request.url),
+                url=_safe_url(resp.request.url),
                 error=str(exc),
                 body=resp.text,
             )

@@ -20,7 +20,7 @@ _SESSION_STDIN: dict[str, anyio.abc.ByteSendStream]   # session_id -> stdin
 _REQUEST_TO_SESSION: dict[str, str]                    # request_id -> session_id
 _DISCUSS_COOLDOWN: dict[str, tuple[float, int]]        # session_id -> (timestamp, deny_count)
 _DISCUSS_APPROVED: set[str]                            # sessions with post-outline approval
-_PENDING_ASK_REQUESTS: dict[str, str]                  # request_id -> question text
+_PENDING_ASK_REQUESTS: dict[str, tuple[int, str]]       # request_id -> (channel_id, question)
 ```
 
 - Register on first `system.init` event (when session_id is known)
@@ -29,10 +29,10 @@ _PENDING_ASK_REQUESTS: dict[str, str]                  # request_id -> question 
 
 ## Auto-approve
 
-Non-interactive tools are auto-approved without showing buttons:
-- List maintained in `_AUTO_APPROVE_TOOLS` set
-- `ControlInitializeRequest`: always auto-approved immediately
-- Tool requests: check `tool_name in _AUTO_APPROVE_TOOLS`
+Non-interactive requests are auto-approved without showing buttons:
+- Request types in `_AUTO_APPROVE_TYPES` tuple: `ControlInitializeRequest`, `ControlHookCallbackRequest`, `ControlMcpMessageRequest`, `ControlRewindFilesRequest`, `ControlInterruptRequest`
+- Tool requests: auto-approved UNLESS `tool_name in _TOOLS_REQUIRING_APPROVAL`
+- `_TOOLS_REQUIRING_APPROVAL = {"ExitPlanMode", "AskUserQuestion"}`
 - `ExitPlanMode`: NEVER auto-approved — always show Telegram buttons
 - `AskUserQuestion`: NEVER auto-approved — shown in Telegram for user to reply with text
 
@@ -66,12 +66,15 @@ After "Pause & Outline Plan" click:
 
 ## Post-outline approval
 
-After cooldown auto-deny, synthetic Approve/Deny buttons appear in Telegram:
+After cooldown auto-deny, synthetic Approve/Deny/Let's discuss buttons (✅/❌/📋 emoji prefixes) appear in Telegram:
 - User clicks "Approve Plan" → session added to `_DISCUSS_APPROVED`, cooldown cleared
 - User clicks "Deny" → cooldown cleared, no auto-approve flag set
+- User clicks "Let's discuss" → control request held open (never responded to) so Claude stays alive; 5-minute safety timeout (`CONTROL_REQUEST_TIMEOUT_SECONDS = 300.0`) cleans up stale held requests
 - Next `ExitPlanMode` checks `_DISCUSS_APPROVED` → auto-approves if present
 - Synthetic callback_data prefix: `da:` (fits 64-byte Telegram limit)
 - Handled in `claude_control.py` before the normal approve/deny flow
+- Outlines rendered as formatted text via `render_markdown()` + `split_markdown_body()` — approval buttons on last message
+- Outline/notification cleanup via module-level `_OUTLINE_REGISTRY` on approve/deny
 
 ## Control request/response format
 

@@ -5,19 +5,19 @@ import uuid
 import anyio
 import pytest
 
+from tests.factories import action_completed, action_started
+from untether.markdown import MarkdownParts, MarkdownPresenter
+from untether.model import ResumeToken, UntetherEvent
 from untether.progress import ProgressTracker
 from untether.runner_bridge import (
+    _EPHEMERAL_MSGS,
     ExecBridgeConfig,
     IncomingMessage,
     ProgressEdits,
-    _EPHEMERAL_MSGS,
     _format_run_cost,
     handle_message,
     register_ephemeral_message,
 )
-from untether.markdown import MarkdownParts, MarkdownPresenter
-from untether.model import ResumeToken, UntetherEvent
-from untether.telegram.render import prepare_telegram
 from untether.runners.codex import CodexRunner
 from untether.runners.mock import (
     Advance,
@@ -29,8 +29,8 @@ from untether.runners.mock import (
     Wait,
 )
 from untether.settings import load_settings, require_telegram
+from untether.telegram.render import prepare_telegram
 from untether.transport import MessageRef, RenderedMessage, SendOptions
-from tests.factories import action_completed, action_started
 
 CODEX_ENGINE = "codex"
 
@@ -419,7 +419,7 @@ async def test_handle_message_cancelled_renders_cancelled_state() -> None:
         for _ in range(100):
             if running_tasks:
                 break
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
         assert running_tasks
         running_task = running_tasks[next(iter(running_tasks))]
         with anyio.fail_after(1):
@@ -532,15 +532,15 @@ async def test_progress_edits_deletes_approval_notification_on_button_disappear(
 
         async def run_one_cycle() -> None:
             # Let the edit loop run one iteration
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             # Now remove approval buttons and trigger another iteration
             presenter.set_no_approval()
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             # Close the signal to end the loop
             edits.signal_send.close()
 
@@ -1093,16 +1093,16 @@ async def test_progress_edits_survives_transport_error() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Second edit — transport succeeds this time
             presenter.set_no_approval()  # change rendered text to trigger an edit
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             edits.signal_send.close()
 
@@ -1495,8 +1495,8 @@ async def test_progress_edits_debounce_skips_first_render() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -1531,8 +1531,8 @@ async def test_progress_edits_debounce_delays_second_render() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Advance clock by 0.5s — less than the 2.0s interval
             clock.set(0.5)
@@ -1540,8 +1540,8 @@ async def test_progress_edits_debounce_delays_second_render() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             edits.signal_send.close()
 
@@ -1575,16 +1575,16 @@ async def test_progress_edits_debounce_zero_interval_no_delay() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Advance clock so the rendered text changes (elapsed_s differs)
             clock.set(5.0)
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             edits.signal_send.close()
 
@@ -1635,12 +1635,12 @@ async def test_progress_edits_notification_does_not_block_render() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Unblock the slow send and close
             send_proceed.set()
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -1672,16 +1672,16 @@ async def test_progress_edits_debounce_no_delay_when_interval_elapsed() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Advance clock well past the interval
             clock.set(10.0)
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             edits.signal_send.close()
 
@@ -1716,14 +1716,14 @@ async def test_progress_edits_end_of_stream_exits_during_debounce() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             # Second event, then immediately cancel the scope
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
             edits_scope.cancel()
 
         tg.start_soon(run_edits)
@@ -1754,9 +1754,9 @@ async def test_progress_edits_notification_failure_does_not_crash() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
 
             edits.signal_send.close()
 
@@ -1915,7 +1915,7 @@ async def test_progress_edits_stall_recovery_clears_warning() -> None:
 
     # Receive a new event
     clock.set(200.0)
-    from untether.model import ActionEvent, Action
+    from untether.model import Action, ActionEvent
 
     evt = ActionEvent(
         engine="codex",
@@ -2045,6 +2045,7 @@ async def test_stall_auto_cancel_dead_process() -> None:
 
     # Patch collect_proc_diag to return dead process
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     dead_diag = ProcessDiag(pid=99999, alive=False)
@@ -2114,6 +2115,7 @@ async def test_stall_auto_cancel_no_pid_no_events() -> None:
 async def test_stall_auto_cancel_max_warnings() -> None:
     """Stall monitor auto-cancels after _STALL_MAX_WARNINGS absolute cap."""
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2158,6 +2160,7 @@ async def test_stall_auto_cancel_max_warnings() -> None:
 async def test_stall_no_auto_cancel_without_cancel_event() -> None:
     """Stall auto-cancel logs but doesn't crash when cancel_event is None."""
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2353,6 +2356,538 @@ async def test_stall_tool_threshold_suppresses_warning() -> None:
     assert edits._stall_warn_count == 0
 
 
+@pytest.mark.anyio
+async def test_stall_mcp_tool_threshold_suppresses_warning() -> None:
+    """Running MCP tool uses longer MCP threshold, suppressing premature stall warnings."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05  # normal: very short
+    edits._STALL_THRESHOLD_TOOL = 0.05  # tool: very short
+    edits._STALL_THRESHOLD_MCP_TOOL = 10.0  # MCP: very long
+    edits._STALL_THRESHOLD_APPROVAL = 10.0
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__cloudflare-observability__query_worker_observability",
+            detail={
+                "name": "mcp__cloudflare-observability__query_worker_observability"
+            },
+        ),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            clock.set(100.1)  # past normal + tool thresholds but not MCP threshold
+            await anyio.sleep(0.05)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # Should NOT have warned — MCP threshold is 10.0, idle only 0.1
+    assert edits._stall_warn_count == 0
+
+
+@pytest.mark.anyio
+async def test_stall_mcp_tool_threshold_fires_after_exceeded() -> None:
+    """Stall monitor fires after the MCP tool threshold is exceeded."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_MCP_TOOL = 0.1  # short for test
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__github__search_code",
+            detail={"name": "mcp__github__search_code"},
+        ),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            clock.set(100.2)  # past MCP threshold (0.1)
+            await anyio.sleep(0.05)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    assert edits._stall_warn_count >= 1
+
+
+@pytest.mark.anyio
+async def test_stall_mcp_tool_notification_message_format() -> None:
+    """Stall notification for MCP tools names the server, not 'session may be stuck'."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_MCP_TOOL = 0.1  # short for test
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__cloudflare-observability__query_worker_observability",
+            detail={
+                "name": "mcp__cloudflare-observability__query_worker_observability"
+            },
+        ),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            clock.set(100.2)  # past MCP threshold
+            await anyio.sleep(0.05)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    mcp_msgs = [
+        c for c in transport.send_calls if "MCP tool running" in c["message"].text
+    ]
+    assert len(mcp_msgs) >= 1
+    assert "cloudflare-observability" in mcp_msgs[0]["message"].text
+    # Should NOT contain the generic "stuck" message
+    stuck_msgs = [
+        c for c in transport.send_calls if "may be stuck" in c["message"].text
+    ]
+    assert len(stuck_msgs) == 0
+
+
+def test_has_running_mcp_tool_returns_server_name() -> None:
+    """_has_running_mcp_tool returns server name for MCP tools, None otherwise."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+
+    from untether.model import Action
+    from untether.progress import ActionState
+
+    # No actions → None
+    assert edits._has_running_mcp_tool() is None
+
+    # Running MCP tool → server name
+    edits.tracker._actions["a1"] = ActionState(
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__github__search_code",
+            detail={"name": "mcp__github__search_code"},
+        ),
+        phase="started",
+        ok=None,
+        display_phase="started",
+        completed=False,
+        first_seen=0,
+        last_update=0,
+    )
+    assert edits._has_running_mcp_tool() == "github"
+
+    # Non-MCP tool → None
+    edits.tracker._actions["a2"] = ActionState(
+        action=Action(id="a2", kind="tool", title="Bash", detail={"name": "Bash"}),
+        phase="started",
+        ok=None,
+        display_phase="started",
+        completed=False,
+        first_seen=0,
+        last_update=0,
+    )
+    assert edits._has_running_mcp_tool() is None
+
+    # Completed MCP tool → None
+    edits.tracker._actions.clear()
+    edits.tracker._actions["a3"] = ActionState(
+        action=Action(
+            id="a3",
+            kind="tool",
+            title="mcp__cloudflare__list_workers",
+            detail={"name": "mcp__cloudflare__list_workers"},
+        ),
+        phase="completed",
+        ok=True,
+        display_phase="completed",
+        completed=True,
+        first_seen=0,
+        last_update=0,
+    )
+    assert edits._has_running_mcp_tool() is None
+
+
+@pytest.mark.anyio
+async def test_stall_mcp_hung_escalation_notifies_after_frozen_ring() -> None:
+    """When MCP tool is running and ring buffer is frozen for 3+ checks, notify user."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_MCP_TOOL = 0.05  # short so it fires quickly
+    edits._stall_repeat_seconds = 0.0  # no delay between warnings
+
+    # Provide a fake stream with a frozen ring buffer
+    from collections import deque
+    from types import SimpleNamespace
+
+    fake_stream = SimpleNamespace(
+        recent_events=deque([(1.0, "system"), (2.0, "assistant")], maxlen=10),
+        last_event_type="user",
+        stderr_capture=[],
+    )
+    edits.stream = fake_stream
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__cloudflare__query_workers",
+            detail={"name": "mcp__cloudflare__query_workers"},
+        ),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            # Advance past threshold, let 5 stall checks fire (all with frozen ring)
+            clock.set(100.5)
+            await anyio.sleep(0.15)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # Should have fired multiple stall warnings
+    assert edits._stall_warn_count >= 4
+    # After 3+ frozen checks, should have sent a "may be hung" notification
+    hung_msgs = [c for c in transport.send_calls if "may be hung" in c["message"].text]
+    assert len(hung_msgs) >= 1
+    assert "cloudflare" in hung_msgs[0]["message"].text
+    assert "no new events" in hung_msgs[0]["message"].text
+
+
+@pytest.mark.anyio
+async def test_stall_mcp_not_hung_when_ring_buffer_advances() -> None:
+    """When MCP tool is running but ring buffer changes, suppress notification normally."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_MCP_TOOL = 0.05
+    edits._stall_repeat_seconds = 0.0
+
+    from collections import deque
+    from types import SimpleNamespace
+
+    ring = deque([(1.0, "system"), (2.0, "assistant")], maxlen=10)
+    fake_stream = SimpleNamespace(
+        recent_events=ring,
+        last_event_type="user",
+        stderr_capture=[],
+    )
+    edits.stream = fake_stream
+
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="a1",
+            kind="tool",
+            title="mcp__github__search_code",
+            detail={"name": "mcp__github__search_code"},
+        ),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    clock.set(100.0)
+
+    async with anyio.create_task_group() as tg:
+
+        async def drive() -> None:
+            clock.set(100.5)
+            for i in range(5):
+                # Advance the ring buffer each iteration to simulate progress
+                ring.append((100.0 + i, "user"))
+                await anyio.sleep(0.03)
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(drive)
+
+    # Should NOT have sent any "may be hung" messages — ring buffer was advancing
+    hung_msgs = [c for c in transport.send_calls if "may be hung" in c["message"].text]
+    assert len(hung_msgs) == 0
+    # Frozen ring count should be 0 or very low since events kept coming
+    assert edits._frozen_ring_count <= 1
+
+
+@pytest.mark.anyio
+async def test_stall_frozen_ring_escalates_without_mcp_tool() -> None:
+    """When no MCP tool is running but ring buffer is frozen for 3+ checks, notify user.
+
+    Regression test for #155: frozen ring buffer escalation was gated on
+    mcp_server being set, so general stalls with cpu_active=True were
+    suppressed indefinitely.
+    """
+    from collections import deque
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.0  # no delay between warnings
+    edits._STALL_MAX_WARNINGS = 100  # don't hit auto-cancel
+    edits.pid = 12345
+    edits.event_seq = 5
+
+    # Provide a fake stream with a frozen ring buffer — NO MCP tool
+    fake_stream = SimpleNamespace(
+        recent_events=deque([(1.0, "assistant"), (2.0, "result")], maxlen=10),
+        last_event_type="result",
+        stderr_capture=[],
+    )
+    edits.stream = fake_stream
+
+    # No tool action — just a completed run that went silent
+    clock.set(100.0)
+
+    call_count = 0
+
+    def active_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=active_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                # Advance past threshold, let enough stall checks fire
+                for i in range(8):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # After 3+ frozen checks, should have sent a notification despite cpu_active
+    notify_msgs = [
+        c
+        for c in transport.send_calls
+        if "no new events" in c["message"].text.lower()
+        or (
+            "no progress" in c["message"].text.lower()
+            and "cpu active" in c["message"].text.lower()
+        )
+    ]
+    assert len(notify_msgs) >= 1, (
+        f"Expected frozen ring escalation notification, got: "
+        f"{[c['message'].text for c in transport.send_calls]}"
+    )
+    # Should NOT mention MCP
+    assert "mcp" not in notify_msgs[0]["message"].text.lower()
+    # Should mention CPU active context
+    assert "cpu active" in notify_msgs[0]["message"].text.lower()
+
+
+@pytest.mark.anyio
+async def test_stall_frozen_ring_uses_tool_message_when_bash_running() -> None:
+    """When ring buffer is frozen and a Bash command is running (main sleeping,
+    CPU active on children), the first stall warning fires and repeats are
+    suppressed — because no JSONL events during tool execution is expected.
+
+    Regression test for #188: frozen ring buffer no longer fires alarming
+    'No progress' or spams repeated warnings when Claude is legitimately
+    waiting for a long Bash command.
+    """
+    from collections import deque
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from untether.model import Action, ActionEvent
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05  # override 600s tool threshold
+    edits._stall_repeat_seconds = 0.0
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+
+    # Simulate a running Bash command action
+    await edits.on_event(
+        ActionEvent(
+            engine="claude",
+            action=Action(
+                id="a1",
+                kind="command",
+                title='echo "running benchmarks"',
+            ),
+            phase="started",
+        )
+    )
+
+    # Provide a frozen ring buffer
+    fake_stream = SimpleNamespace(
+        recent_events=deque([(1.0, "assistant"), (2.0, "result")], maxlen=10),
+        last_event_type="result",
+        stderr_capture=[],
+    )
+    edits.stream = fake_stream
+
+    clock.set(100.0)
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",  # main process sleeping (waiting for child)
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    initial_seq = edits.event_seq
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(8):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # First warning fires (cpu_active=None on first check, no baseline).
+    # Subsequent stalls suppressed by tool-active suppression (tool running
+    # + CPU active + main sleeping = child process is working).
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "bash" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+        or "still running" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (repeats suppressed), got "
+        f"{len(stall_msgs)}: {[c['message'].text for c in stall_msgs]}"
+    )
+    # Should mention Bash, NOT "No progress"
+    assert "bash" in stall_msgs[0]["message"].text.lower()
+    assert "no progress" not in stall_msgs[0]["message"].text.lower()
+    # Heartbeat should have bumped event_seq for suppressed checks
+    assert edits.event_seq > initial_seq
+
+
+def test_frozen_ring_count_resets_on_event() -> None:
+    """_frozen_ring_count and _prev_recent_events reset when a real event arrives."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+
+    # Simulate frozen state
+    edits._frozen_ring_count = 5
+    edits._prev_recent_events = [(1.0, "system")]
+    edits._stall_warned = True
+    edits._stall_warn_count = 3
+
+    import asyncio
+
+    from untether.model import Action, ActionEvent
+
+    asyncio.run(
+        edits.on_event(
+            ActionEvent(
+                engine="claude",
+                action=Action(id="a1", kind="tool", title="Bash"),
+                phase="started",
+            )
+        )
+    )
+
+    assert edits._frozen_ring_count == 0
+    assert edits._prev_recent_events is None
+    assert edits._stall_warned is False
+    assert edits._stall_warn_count == 0
+
+
 # ===========================================================================
 # Phase 2b: Edit-fail fallback in _send_or_edit_message (#103)
 # ===========================================================================
@@ -2366,7 +2901,7 @@ async def test_send_or_edit_message_edit_fail_fallback() -> None:
     class _FailEditTransport(FakeTransport):
         async def edit(self, *, ref, message, wait=True):
             self.edit_calls.append({"ref": ref, "message": message, "wait": wait})
-            return None  # simulate edit failure
+            return  # simulate edit failure
 
     transport = _FailEditTransport()
     edit_ref = MessageRef(channel_id=123, message_id=99)
@@ -2436,8 +2971,8 @@ async def test_keyboard_edit_failure_logged() -> None:
     async with anyio.create_task_group() as tg:
 
         async def drive() -> None:
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -2475,6 +3010,7 @@ async def test_stall_auto_cancel_suppressed_by_cpu_activity() -> None:
     (extended thinking) should not be auto-cancelled at max_warnings.
     """
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2528,9 +3064,13 @@ async def test_stall_auto_cancel_suppressed_by_cpu_activity() -> None:
         c for c in transport.send_calls if "Auto-cancelled" in c["message"].text
     ]
     assert len(auto_cancel_msgs) == 0
-    # First stall fires (cpu_active=None, no baseline), subsequent suppressed
+    # First stall fires (cpu_active=None, no baseline). Subsequent are suppressed
+    # until frozen ring buffer escalation kicks in after 3+ frozen checks (#155).
     stall_msgs = [c for c in transport.send_calls if "No progress" in c["message"].text]
-    assert len(stall_msgs) <= 1
+    assert len(stall_msgs) >= 1  # at least the initial notification
+    # After frozen escalation, messages mention "CPU active, no new events"
+    frozen_msgs = [c for c in stall_msgs if "CPU active" in c["message"].text]
+    assert len(frozen_msgs) >= 1  # frozen ring buffer escalation fired
 
 
 @pytest.mark.anyio
@@ -2541,6 +3081,7 @@ async def test_stall_auto_cancel_fires_with_flat_cpu() -> None:
     ensure the guard only suppresses when CPU is genuinely active.
     """
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2594,6 +3135,7 @@ async def test_stall_auto_cancel_fires_with_flat_cpu() -> None:
 async def test_stall_notification_suppressed_when_cpu_active() -> None:
     """Stall notifications suppressed when cpu_active=True; heartbeat re-renders fire."""
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2641,10 +3183,11 @@ async def test_stall_notification_suppressed_when_cpu_active() -> None:
             tg.start_soon(edits.run)
             tg.start_soon(drive)
 
-    # First stall fires (cpu_active=None, no baseline), subsequent suppressed
+    # First stall fires (cpu_active=None, no baseline). Subsequent are suppressed
+    # until frozen ring buffer escalation kicks in after 3+ frozen checks (#155).
     stall_msgs = [c for c in transport.send_calls if "No progress" in c["message"].text]
-    assert len(stall_msgs) <= 1
-
+    assert len(stall_msgs) >= 1  # at least the initial notification
+    # Early stalls (before frozen threshold) should be suppressed via heartbeat
     # Heartbeat should have bumped event_seq (re-renders via edit)
     assert edits.event_seq > initial_seq
 
@@ -2653,6 +3196,7 @@ async def test_stall_notification_suppressed_when_cpu_active() -> None:
 async def test_stall_notification_fires_when_cpu_inactive() -> None:
     """Stall notifications should fire when cpu_active=False (flat CPU)."""
     from unittest.mock import patch
+
     from untether.utils.proc_diag import ProcessDiag
 
     transport = FakeTransport()
@@ -2698,6 +3242,384 @@ async def test_stall_notification_fires_when_cpu_inactive() -> None:
     assert len(stall_msgs) >= 1
 
 
+@pytest.mark.anyio
+async def test_stall_not_suppressed_when_main_sleeping() -> None:
+    """Stall notification should fire when cpu_active=True but main process is
+    sleeping (state=S) — CPU activity is from child processes (hung Bash tool),
+    not from Claude doing extended thinking."""
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",  # sleeping — waiting for child process
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(6):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # Despite cpu_active=True, notifications should NOT be suppressed because
+    # the main process is sleeping (state=S) — child processes are active.
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+        or "tool" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) >= 2, (
+        f"Expected multiple stall notifications when main sleeping, got {len(stall_msgs)}"
+    )
+
+
+@pytest.mark.anyio
+async def test_stall_message_includes_tool_name_when_sleeping() -> None:
+    """Stall message should mention the tool name when main process is sleeping."""
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Set the last action to simulate a Bash tool running
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="Bash"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+    # Complete the action so last_action shows it
+    evt2 = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="Bash"),
+        phase="completed",
+        ok=True,
+    )
+    await edits.on_event(evt2)
+
+    call_count = 0
+
+    def sleeping_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(4):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # At least one stall message should mention "Bash tool"
+    tool_msgs = [c for c in transport.send_calls if "Bash tool" in c["message"].text]
+    assert len(tool_msgs) >= 1, (
+        f"Expected stall message mentioning 'Bash tool', got messages: "
+        f"{[c['message'].text for c in transport.send_calls]}"
+    )
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_suppressed_after_first_warning() -> None:
+    """When main sleeping + cpu active + tool running, the first stall warning
+    fires but repeats are suppressed (heartbeat only)."""
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action (not completed)
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    initial_seq = edits.event_seq
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(8):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # First warning should fire (stall_warn_count == 1).
+    # Subsequent should be suppressed (tool running + cpu active).
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "still running" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (first only), got {len(stall_msgs)}: "
+        f"{[c['message'].text for c in stall_msgs]}"
+    )
+    # Heartbeat should have bumped event_seq for suppressed checks
+    assert edits.event_seq > initial_seq
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_not_suppressed_when_cpu_idle() -> None:
+    """When main sleeping + cpu NOT active + tool running, stall warnings
+    should continue firing (tool may be genuinely stuck)."""
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    # Flat CPU — no activity (all snapshots return same values)
+    flat_diag = ProcessDiag(
+        pid=12345,
+        alive=True,
+        state="S",
+        cpu_utime=1000,
+        cpu_stime=200,
+    )
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        return_value=flat_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(6):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # CPU idle — all warnings should fire (tool may be stuck)
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "stuck" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "still running" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) >= 2, (
+        f"Expected multiple stall notifications when CPU idle, got {len(stall_msgs)}: "
+        f"{[c['message'].text for c in stall_msgs]}"
+    )
+
+
+@pytest.mark.anyio
+async def test_stall_tool_active_suppressed_even_with_frozen_ring() -> None:
+    """When main sleeping + cpu active + tool running, repeat stall warnings
+    are suppressed even if the ring buffer is frozen — because no JSONL events
+    during tool execution is expected (the child process is working)."""
+    from unittest.mock import patch
+
+    from untether.utils.proc_diag import ProcessDiag
+
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._stall_repeat_seconds = 0.01
+    edits._STALL_MAX_WARNINGS = 100
+    edits.pid = 12345
+    edits.event_seq = 5
+    cancel_event = anyio.Event()
+    edits.cancel_event = cancel_event
+
+    # Register a running tool action
+    from untether.model import Action, ActionEvent
+
+    evt = ActionEvent(
+        engine="claude",
+        action=Action(id="a1", kind="tool", title="command:bash -c 'sleep 600'"),
+        phase="started",
+    )
+    await edits.on_event(evt)
+
+    # Force frozen ring buffer count above escalation threshold (3)
+    edits._frozen_ring_count = 5
+
+    call_count = 0
+
+    def sleeping_cpu_diag(pid: int) -> ProcessDiag:
+        nonlocal call_count
+        call_count += 1
+        return ProcessDiag(
+            pid=pid,
+            alive=True,
+            state="S",
+            cpu_utime=1000 + call_count * 300,
+            cpu_stime=200 + call_count * 50,
+        )
+
+    initial_seq = edits.event_seq
+
+    with patch(
+        "untether.utils.proc_diag.collect_proc_diag",
+        side_effect=sleeping_cpu_diag,
+    ):
+        async with anyio.create_task_group() as tg:
+
+            async def drive() -> None:
+                for i in range(6):
+                    clock.set(100.1 + i * 0.1)
+                    await anyio.sleep(0.03)
+                    if cancel_event.is_set():
+                        break
+                edits.signal_send.close()
+
+            tg.start_soon(edits.run)
+            tg.start_soon(drive)
+
+    # Despite frozen ring buffer, tool + cpu active → only first warning fires
+    stall_msgs = [
+        c
+        for c in transport.send_calls
+        if "still running" in c["message"].text.lower()
+        or "progress" in c["message"].text.lower()
+        or "stuck" in c["message"].text.lower()
+    ]
+    assert len(stall_msgs) == 1, (
+        f"Expected exactly 1 stall notification (frozen ring suppressed by tool-active), "
+        f"got {len(stall_msgs)}: {[c['message'].text for c in stall_msgs]}"
+    )
+    # Heartbeat should have bumped event_seq
+    assert edits.event_seq > initial_seq
+
+
 # ---------------------------------------------------------------------------
 # Plan outline rendering, keyboard, and cleanup tests
 # ---------------------------------------------------------------------------
@@ -2714,7 +3636,7 @@ async def test_outline_messages_rendered_with_entities() -> None:
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg)
         # Let the background task complete
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
 
     # Should have sent one message (short text)
     outline_sends = [
@@ -2740,7 +3662,7 @@ async def test_outline_last_message_has_approval_keyboard() -> None:
     outline = "## Plan\n\nStep 1.\n\nStep 2."
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg, approval_keyboard=approval_kb)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
 
     # The last sent message should have the approval keyboard
     last_send = transport.send_calls[-1]
@@ -2759,7 +3681,7 @@ async def test_outline_multi_chunk_keyboard_only_on_last() -> None:
     outline = "## Section\n\n" + "x" * 3000 + "\n\n## Section 2\n\n" + "y" * 3000
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg, approval_keyboard=approval_kb)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
 
     outline_sends = list(transport.send_calls)
     assert len(outline_sends) >= 2
@@ -2779,7 +3701,7 @@ async def test_outline_refs_tracked() -> None:
     outline = "## Plan\n\nDo things."
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg)
-        await anyio.sleep(0)
+        await anyio.lowlevel.checkpoint()
 
     assert len(edits._outline_refs) == 1
     assert edits._outline_refs[0] == transport.send_calls[-1]["ref"]
@@ -2802,8 +3724,8 @@ async def test_outline_messages_deleted_on_approval_transition() -> None:
 
         async def run_cycle() -> None:
             # Let first render (with approval) complete
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             # Manually inject outline refs (simulating _send_outline)
             outline_ref = MessageRef(channel_id=123, message_id=999)
             edits._outline_refs.append(outline_ref)
@@ -2812,8 +3734,8 @@ async def test_outline_messages_deleted_on_approval_transition() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -2842,8 +3764,8 @@ async def test_outline_deleted_on_keyboard_change() -> None:
 
         async def run_cycle() -> None:
             # Let first render (with approval) complete
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             # Inject outline refs
             outline_ref = MessageRef(channel_id=123, message_id=888)
             edits._outline_refs.append(outline_ref)
@@ -2856,8 +3778,8 @@ async def test_outline_deleted_on_keyboard_change() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.sleep(0)
-            await anyio.sleep(0)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -2906,6 +3828,91 @@ async def test_outline_not_double_deleted() -> None:
     assert transport.delete_calls == []
 
 
+@pytest.mark.anyio
+async def test_outline_sent_strips_approval_from_progress() -> None:
+    """When outline is sent, progress message should only keep cancel button (#163)."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+
+    # Mark outline as sent with visible refs (simulating outline delivery)
+    edits._outline_sent = True
+    edits._outline_refs.append(MessageRef(channel_id=123, message_id=500))
+
+    # Add a DiscussApproval action to the tracker (outline-related approval)
+    from untether.model import Action, ActionEvent
+
+    outline_evt = ActionEvent(
+        engine="claude",
+        action=Action(
+            id="claude.discuss_approve.1",
+            kind="warning",
+            title="Plan outlined",
+            detail={"request_type": "DiscussApproval"},
+        ),
+        phase="started",
+    )
+    edits.tracker.note_event(outline_evt)
+
+    # Trigger render with approval buttons from the presenter
+    presenter.set_approval_buttons()
+    edits.event_seq = 1
+    with contextlib.suppress(anyio.WouldBlock):
+        edits.signal_send.send_nowait(None)
+
+    async with anyio.create_task_group() as tg:
+
+        async def run_cycle() -> None:
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(run_cycle)
+
+    # Progress message should only have cancel row (approval stripped)
+    last_edit = transport.edit_calls[-1]
+    kb = last_edit["message"].extra["reply_markup"]["inline_keyboard"]
+    assert len(kb) == 1  # Only cancel row
+    assert kb[0][0]["text"] == "Cancel"
+
+
+@pytest.mark.anyio
+async def test_outline_state_resets_on_approval_disappear() -> None:
+    """After outline cycle completes, _outline_sent resets for future requests (#163)."""
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    edits = _make_edits(transport, presenter)
+
+    # Simulate: outline was sent, refs cleaned up, approval buttons visible
+    edits._outline_sent = True
+    presenter.set_approval_buttons()
+    edits.event_seq = 1
+    with contextlib.suppress(anyio.WouldBlock):
+        edits.signal_send.send_nowait(None)
+
+    async with anyio.create_task_group() as tg:
+
+        async def run_cycle() -> None:
+            # First cycle: approval with outline_sent → stripped
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
+            # Now buttons disappear (approval resolved)
+            presenter.set_no_approval()
+            edits.event_seq = 2
+            with contextlib.suppress(anyio.WouldBlock):
+                edits.signal_send.send_nowait(None)
+            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()
+            edits.signal_send.close()
+
+        tg.start_soon(edits.run)
+        tg.start_soon(run_cycle)
+
+    # _outline_sent should be reset so future ExitPlanMode works
+    assert edits._outline_sent is False
+
+
 # ---------------------------------------------------------------------------
 # Outbox file delivery tests
 # ---------------------------------------------------------------------------
@@ -2917,7 +3924,7 @@ async def test_outbox_files_sent_after_completion(tmp_path) -> None:
     from unittest.mock import AsyncMock
 
     from untether.settings import TelegramFilesSettings
-    from untether.utils.paths import set_run_base_dir, reset_run_base_dir
+    from untether.utils.paths import reset_run_base_dir, set_run_base_dir
 
     outbox = tmp_path / ".untether-outbox"
     outbox.mkdir()
@@ -2949,7 +3956,7 @@ async def test_outbox_files_sent_after_completion(tmp_path) -> None:
 @pytest.mark.anyio
 async def test_outbox_not_scanned_when_disabled(tmp_path) -> None:
     """Outbox is not scanned when send_file callback is None."""
-    from untether.utils.paths import set_run_base_dir, reset_run_base_dir
+    from untether.utils.paths import reset_run_base_dir, set_run_base_dir
 
     outbox = tmp_path / ".untether-outbox"
     outbox.mkdir()
@@ -2980,7 +3987,7 @@ async def test_outbox_not_scanned_on_error(tmp_path) -> None:
     from unittest.mock import AsyncMock
 
     from untether.settings import TelegramFilesSettings
-    from untether.utils.paths import set_run_base_dir, reset_run_base_dir
+    from untether.utils.paths import reset_run_base_dir, set_run_base_dir
 
     outbox = tmp_path / ".untether-outbox"
     outbox.mkdir()
@@ -3005,3 +4012,126 @@ async def test_outbox_not_scanned_on_error(tmp_path) -> None:
         reset_run_base_dir(token)
 
     send_file.assert_not_called()
+
+
+# ── _should_auto_continue detection (#34142/#30333) ──
+
+
+class TestShouldAutoContinue:
+    """Tests for the auto-continue detection function."""
+
+    def _call(
+        self,
+        *,
+        last_event_type: str | None = "user",
+        engine: str = "claude",
+        cancelled: bool = False,
+        resume_value: str | None = "c3f20b1d-58f9-4173-a68e-8735256cf9ae",
+        auto_continued_count: int = 0,
+        max_retries: int = 1,
+        proc_returncode: int | None = 0,
+    ) -> bool:
+        from untether.runner_bridge import _should_auto_continue
+
+        return _should_auto_continue(
+            last_event_type=last_event_type,
+            engine=engine,
+            cancelled=cancelled,
+            resume_value=resume_value,
+            auto_continued_count=auto_continued_count,
+            max_retries=max_retries,
+            proc_returncode=proc_returncode,
+        )
+
+    def test_detects_bug_scenario(self):
+        assert self._call() is True
+
+    def test_skips_non_claude_engine(self):
+        assert self._call(engine="codex") is False
+
+    def test_skips_cancelled(self):
+        assert self._call(cancelled=True) is False
+
+    def test_skips_result_event_type(self):
+        assert self._call(last_event_type="result") is False
+
+    def test_skips_assistant_event_type(self):
+        assert self._call(last_event_type="assistant") is False
+
+    def test_skips_none_event_type(self):
+        assert self._call(last_event_type=None) is False
+
+    def test_skips_no_resume(self):
+        assert self._call(resume_value=None) is False
+
+    def test_skips_empty_resume(self):
+        assert self._call(resume_value="") is False
+
+    def test_respects_max_retries(self):
+        assert self._call(auto_continued_count=0, max_retries=1) is True
+        assert self._call(auto_continued_count=1, max_retries=1) is False
+        assert self._call(auto_continued_count=2, max_retries=3) is True
+        assert self._call(auto_continued_count=3, max_retries=3) is False
+
+    def test_disabled_when_max_retries_zero(self):
+        assert self._call(auto_continued_count=0, max_retries=0) is False
+
+    def test_skips_sigterm_death(self):
+        """rc=143 (SIGTERM/earlyoom) — do NOT auto-continue."""
+        assert self._call(proc_returncode=143) is False
+
+    def test_skips_sigkill_death(self):
+        """rc=137 (SIGKILL) — do NOT auto-continue."""
+        assert self._call(proc_returncode=137) is False
+
+    def test_skips_negative_signal(self):
+        """rc=-9 (Python SIGKILL) — do NOT auto-continue."""
+        assert self._call(proc_returncode=-9) is False
+
+    def test_skips_negative_sigterm(self):
+        """rc=-15 (Python SIGTERM) — do NOT auto-continue."""
+        assert self._call(proc_returncode=-15) is False
+
+    def test_allows_rc_zero(self):
+        """rc=0 (upstream bug #34142) — DO auto-continue."""
+        assert self._call(proc_returncode=0) is True
+
+    def test_allows_rc_none(self):
+        """rc=None (unknown) — DO auto-continue (conservative)."""
+        assert self._call(proc_returncode=None) is True
+
+    def test_allows_rc_one(self):
+        """rc=1 (generic error) — DO auto-continue."""
+        assert self._call(proc_returncode=1) is True
+
+
+class TestIsSignalDeath:
+    """Tests for _is_signal_death helper."""
+
+    def test_sigterm(self):
+        from untether.runner_bridge import _is_signal_death
+
+        assert _is_signal_death(143) is True  # 128 + 15
+
+    def test_sigkill(self):
+        from untether.runner_bridge import _is_signal_death
+
+        assert _is_signal_death(137) is True  # 128 + 9
+
+    def test_negative_signal(self):
+        from untether.runner_bridge import _is_signal_death
+
+        assert _is_signal_death(-9) is True
+        assert _is_signal_death(-15) is True
+
+    def test_normal_exit(self):
+        from untether.runner_bridge import _is_signal_death
+
+        assert _is_signal_death(0) is False
+        assert _is_signal_death(1) is False
+        assert _is_signal_death(2) is False
+
+    def test_none(self):
+        from untether.runner_bridge import _is_signal_death
+
+        assert _is_signal_death(None) is False

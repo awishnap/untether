@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
-from collections.abc import Iterable
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     StringConstraints,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -19,8 +19,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import TomlConfigSettingsSource
 
 from .config import (
-    ConfigError,
     HOME_CONFIG_PATH,
+    ConfigError,
     ProjectConfig,
     ProjectsConfig,
 )
@@ -156,12 +156,25 @@ class PreambleSettings(BaseModel):
     text: str | None = None
 
 
+class AutoContinueSettings(BaseModel):
+    """Mitigate Claude Code bug #34142/#30333: session exits after receiving
+    tool results without letting Claude process them.  When detected, Untether
+    auto-resumes the session so the user doesn't have to manually continue."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    enabled: bool = True
+    max_retries: int = Field(default=1, ge=0, le=3)
+
+
 class WatchdogSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     liveness_timeout: float = Field(default=600.0, ge=60, le=3600)
     stall_auto_kill: bool = False
     stall_repeat_seconds: float = Field(default=180.0, ge=30, le=600)
+    tool_timeout: float = Field(default=600.0, ge=60, le=7200)
+    mcp_tool_timeout: float = Field(default=900.0, ge=60, le=7200)
 
 
 class ProgressSettings(BaseModel):
@@ -195,6 +208,7 @@ class UntetherSettings(BaseSettings):
     preamble: PreambleSettings = Field(default_factory=PreambleSettings)
     progress: ProgressSettings = Field(default_factory=ProgressSettings)
     watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
+    auto_continue: AutoContinueSettings = Field(default_factory=AutoContinueSettings)
 
     @model_validator(mode="before")
     @classmethod

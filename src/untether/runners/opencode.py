@@ -13,6 +13,7 @@ Session IDs use the format: ses_XXXX (e.g., ses_494719016ffe85dkDMj0FPRbHK)
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,9 +42,9 @@ from ..runner import (
     _session_label,
     _stderr_excerpt,
 )
-from .run_options import get_run_options
 from ..schemas import opencode as opencode_schema
 from ..utils.paths import relativize_path
+from .run_options import get_run_options
 from .tool_actions import tool_input_path, tool_kind_and_title
 
 logger = get_logger(__name__)
@@ -53,6 +54,23 @@ ENGINE: EngineId = "opencode"
 _RESUME_RE = re.compile(
     r"(?im)^\s*`?opencode(?:\s+run)?\s+(?:--session|-s)\s+(?P<token>ses_[A-Za-z0-9]+)`?\s*$"
 )
+
+
+def _extract_event_type(raw: str) -> str | None:
+    """Extract the ``type`` field from raw JSON for diagnostics.
+
+    Used when msgspec raises DecodeError (unrecognised event type) to provide
+    visible feedback instead of silently dropping the event.
+    """
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            t = obj.get("type")
+            if isinstance(t, str):
+                return t
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return None
 
 
 @dataclass(slots=True)
@@ -494,6 +512,19 @@ class OpenCodeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         state: OpenCodeStreamState,
     ) -> list[UntetherEvent]:
         if isinstance(error, msgspec.DecodeError):
+            event_type = _extract_event_type(raw)
+            if event_type:
+                self.get_logger().warning(
+                    "opencode.event.unsupported",
+                    event_type=event_type,
+                    tag=self.tag(),
+                )
+                return [
+                    self.note_event(
+                        f"opencode emitted unsupported event: {event_type}",
+                        state=state,
+                    )
+                ]
             self.get_logger().warning(
                 "jsonl.msgspec.invalid",
                 tag=self.tag(),
@@ -501,7 +532,10 @@ class OpenCodeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                 error_type=error.__class__.__name__,
             )
             return []
-        return super().decode_error_events(
+        # Explicit parent ref: zero-arg super() breaks in @dataclass(slots=True)
+        # on Python <3.14 because the __class__ cell references the pre-slot class.
+        return JsonlSubprocessRunner.decode_error_events(
+            self,
             raw=raw,
             line=line,
             error=error,
@@ -595,6 +629,25 @@ class OpenCodeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         ]
 
 
+def _read_opencode_default_model() -> str | None:
+    """Read the default model from OpenCode's own config file.
+
+    OpenCode stores its config at ``~/.config/opencode/opencode.json`` with a
+    top-level ``"model"`` key (e.g. ``"openai/gpt-5.2"``).  We read this at
+    runner construction time so the model appears in the Telegram footer even
+    when no override is set in ``untether.toml``.
+    """
+    oc_config = Path.home() / ".config" / "opencode" / "opencode.json"
+    try:
+        data = json.loads(oc_config.read_text(encoding="utf-8"))
+        model = data.get("model")
+        if isinstance(model, str) and model:
+            return model
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
     """Build an OpenCodeRunner from configuration."""
     opencode_cmd = "opencode"
@@ -604,6 +657,13 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         raise ConfigError(
             f"Invalid `opencode.model` in {config_path}; expected a string."
         )
+
+    # Fall back to OpenCode's own config for the default model so it appears
+    # in the Telegram footer even without an untether.toml override.
+    if model is None:
+        model = _read_opencode_default_model()
+        if model is not None:
+            logger.debug("opencode.default_model.detected", model=model)
 
     title = str(model) if model is not None else "opencode"
 

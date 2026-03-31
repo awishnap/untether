@@ -85,9 +85,13 @@ def _format_export_markdown(
 
     lines.append("---\n")
 
+    started_rendered = False
     for evt in events:
         evt_type = evt.get("type", "unknown")
         if evt_type == "started":
+            if started_rendered:
+                continue
+            started_rendered = True
             engine = evt.get("engine", "unknown")
             title = evt.get("title", "")
             lines.append(f"## Session Started ({engine})")
@@ -173,7 +177,7 @@ class ExportCommand:
         # Get the most recent session for this chat
         key = max(chat_sessions, key=lambda k: chat_sessions[k][0])
         session_id = key[1]
-        ts, events, usage = chat_sessions[key]
+        _ts, events, usage = chat_sessions[key]
 
         if not events:
             return CommandResult(

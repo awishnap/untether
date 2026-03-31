@@ -41,7 +41,7 @@ The second message automatically continues the same session — no reply needed.
 
 ## Reset a session
 
-Use `/new` to clear the stored session for the current scope:
+Use `/new` to cancel any running task and clear the stored session for the current scope:
 
 - In a private chat, it resets the chat.
 - In a group, it resets **your** session in that chat.
@@ -71,6 +71,20 @@ If you prefer a cleaner chat, hide resume lines:
 ## How it behaves in groups
 
 In group chats, Untether stores a session per sender, so different people can work independently in the same chat.
+
+## How session persistence works
+
+When `session_mode = "chat"`, Untether stores resume tokens in a JSON state file next to your config:
+
+- **Assistant mode**: `telegram_chat_sessions_state.json` — one token per engine per chat
+- **Workspace mode**: `telegram_topics_state.json` — one token per engine per forum topic
+
+When you send a message, Untether checks the state file for a stored resume token matching the current engine and scope (chat or topic). If found, the engine continues that session. If not, a new session starts.
+
+The `/new` command cancels any running task and clears stored tokens for the current scope. Switching to a different engine also starts a fresh session (each engine has its own token).
+
+!!! note "Handoff mode has no state file"
+    In handoff mode (`session_mode = "stateless"`), no sessions are stored. Each message starts fresh. Continue a session by replying to its bot message or using `/continue`.
 
 ## Working directory changes
 

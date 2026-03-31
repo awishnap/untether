@@ -206,6 +206,7 @@ class JsonlStreamState:
         default_factory=lambda: deque(maxlen=10)
     )
     stderr_capture: list[str] = field(default_factory=list)
+    proc_returncode: int | None = None
 
 
 class JsonlSubprocessRunner(BaseRunner):
@@ -307,6 +308,14 @@ class JsonlSubprocessRunner(BaseRunner):
         try:
             return cast(dict[str, Any], json.loads(text))
         except json.JSONDecodeError:
+            # Some CLIs (e.g. Gemini) mix non-JSON warnings with JSONL on
+            # stdout.  Try to extract the first JSON object from the line.
+            brace = text.find("{")
+            if brace > 0:
+                try:
+                    return cast(dict[str, Any], json.loads(text[brace:]))
+                except json.JSONDecodeError:
+                    pass
             self.get_logger().warning(
                 "runner.jsonl.decode_failed",
                 engine=self.engine,
@@ -926,6 +935,7 @@ class JsonlSubprocessRunner(BaseRunner):
                 reader_done.set()
 
             rc = await proc.wait()
+            stream.proc_returncode = rc
             logger.info("subprocess.exit", pid=proc.pid, rc=rc)
             if stream.did_emit_completed:
                 return

@@ -20,9 +20,9 @@ from ..runner import (
     _session_label,
     _stderr_excerpt,
 )
-from .run_options import get_run_options
 from ..schemas import codex as codex_schema
 from ..utils.paths import relativize_command
+from .run_options import get_run_options
 
 logger = get_logger(__name__)
 
@@ -500,6 +500,8 @@ class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                 )
         if run_options is not None and run_options.permission_mode == "safe":
             args.extend(["--ask-for-approval", "untrusted"])
+        else:
+            args.extend(["--ask-for-approval", "never"])
         args.extend(
             [
                 "exec",
@@ -628,14 +630,16 @@ class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             case _:
                 pass
 
-        # Build meta from runner config + run options
+        # Build meta from runner config + run options.
+        # Always include a model name — use override, runner config, or CLI default.
         meta: dict[str, Any] | None = None
         model = self.model
         run_options = get_run_options()
         if run_options is not None and run_options.model:
             model = run_options.model
-        if model is not None:
-            meta = {"model": str(model)}
+        if model is None:
+            model = "codex-mini-latest"
+        meta = {"model": str(model)}
         if run_options is not None and run_options.reasoning:
             if meta is None:
                 meta = {}

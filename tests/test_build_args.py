@@ -13,7 +13,6 @@ from unittest.mock import patch
 from untether.model import ResumeToken
 from untether.runners.run_options import EngineRunOptions as RunOptions
 
-
 # ---------------------------------------------------------------------------
 # Claude
 # ---------------------------------------------------------------------------
@@ -173,13 +172,26 @@ class TestCodexBuildArgs:
         # Must come before "exec" (top-level flag, not exec subcommand flag)
         assert idx < args.index("exec")
 
-    def test_permission_mode_none_no_approval_flag(self) -> None:
+    def test_permission_mode_none_defaults_to_never(self) -> None:
         runner = self._runner()
         state = runner.new_state("hello", None)
         opts = RunOptions(permission_mode=None)
         with patch("untether.runners.codex.get_run_options", return_value=opts):
             args = runner.build_args("hello", None, state=state)
-        assert "--ask-for-approval" not in args
+        assert "--ask-for-approval" in args
+        idx = args.index("--ask-for-approval")
+        assert args[idx + 1] == "never"
+        assert idx < args.index("exec")
+
+    def test_run_options_none_defaults_to_never(self) -> None:
+        """When run_options is None (no /config overrides), default to never."""
+        runner = self._runner()
+        state = runner.new_state("hello", None)
+        args = runner.build_args("hello", None, state=state)
+        assert "--ask-for-approval" in args
+        idx = args.index("--ask-for-approval")
+        assert args[idx + 1] == "never"
+        assert idx < args.index("exec")
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +260,7 @@ class TestGeminiBuildArgs:
         args = runner.build_args("hello", None, state=state)
         assert "--output-format" in args
         assert "stream-json" in args
-        assert "-p" in args
-        idx = args.index("-p")
-        assert args[idx + 1] == "hello"
+        assert "--prompt=hello" in args
 
     def test_resume(self) -> None:
         runner = self._runner()
@@ -308,6 +318,25 @@ class TestGeminiBuildArgs:
         assert "--approval-mode" in args
         idx = args.index("--approval-mode")
         assert args[idx + 1] == "auto_edit"
+
+    def test_permission_mode_none_defaults_to_yolo(self) -> None:
+        runner = self._runner()
+        state = runner.new_state("hello", None)
+        opts = RunOptions(permission_mode=None)
+        with patch("untether.runners.gemini.get_run_options", return_value=opts):
+            args = runner.build_args("hello", None, state=state)
+        assert "--approval-mode" in args
+        idx = args.index("--approval-mode")
+        assert args[idx + 1] == "yolo"
+
+    def test_run_options_none_defaults_to_yolo(self) -> None:
+        runner = self._runner()
+        state = runner.new_state("hello", None)
+        with patch("untether.runners.gemini.get_run_options", return_value=None):
+            args = runner.build_args("hello", None, state=state)
+        assert "--approval-mode" in args
+        idx = args.index("--approval-mode")
+        assert args[idx + 1] == "yolo"
 
 
 # ---------------------------------------------------------------------------

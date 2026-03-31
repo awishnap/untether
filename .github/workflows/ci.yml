@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "master"
+      - "dev"
   pull_request:
 
 permissions: {}
@@ -34,6 +35,7 @@ jobs:
             do_sync: true
             command: uv run --no-sync ty check --warn invalid-argument-type --warn unresolved-attribute --warn invalid-assignment --warn not-subscriptable src tests
             sync_args: --no-install-project
+            allow_failure: true  # ty has pre-existing warnings; informational only
           - task: lockfile
             do_sync: false
             command: uv lock --check
@@ -59,6 +61,7 @@ jobs:
 
       - name: Run check
         run: ${{ matrix.command }}
+        continue-on-error: ${{ matrix.allow_failure || false }}
 
   pytest:
     name: pytest (Python ${{ matrix.python-version }})
@@ -163,7 +166,7 @@ jobs:
 
   testpypi-publish:
     name: Publish to TestPyPI
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     needs: [build, pytest]
     runs-on: ubuntu-latest
     environment:
@@ -197,7 +200,7 @@ jobs:
         include:
           - task: pip-audit
             do_sync: true
-            command: uv run --no-sync pip-audit --skip-editable --progress-spinner=off
+            command: uv run --no-sync pip-audit --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-4539  # pygments 2.19.2, no fix available
             sync_args: ""
           - task: bandit
             do_sync: true

@@ -43,8 +43,8 @@ from ..runner import (
     _session_label,
     _stderr_excerpt,
 )
-from .run_options import get_run_options
 from ..schemas import gemini as gemini_schema
+from .run_options import get_run_options
 from .tool_actions import tool_input_path, tool_kind_and_title
 
 logger = get_logger(__name__)
@@ -346,7 +346,9 @@ class GeminiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             args.extend(["--model", str(model)])
         if run_options is not None and run_options.permission_mode:
             args.extend(["--approval-mode", run_options.permission_mode])
-        args.extend(["-p", prompt])
+        else:
+            args.extend(["--approval-mode", "yolo"])
+        args.append(f"--prompt={prompt}")
         return args
 
     def stdin_payload(

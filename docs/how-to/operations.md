@@ -44,6 +44,36 @@ This means `systemctl --user stop untether` (Linux) also drains gracefully, as s
 !!! note "Drain timeout"
     The default drain timeout is 120 seconds. If active runs don't complete within this window, they are cancelled and a timeout notification is sent to Telegram.
 
+## Orphan progress cleanup
+
+When Untether restarts (after a crash, upgrade, or manual restart), any progress messages from the previous instance are still visible in Telegram — stuck showing "working" with stale elapsed time.
+
+Untether automatically handles this: active progress messages are tracked in `active_progress.json` in the config directory. On startup, any orphan messages from a prior instance are edited to show:
+
+!!! untether "Untether"
+    ⚠️ interrupted by restart
+
+This replaces the stale progress text and removes any inline keyboards (approval buttons), so there's no confusion about which messages are from the current session.
+
+The cleanup happens before the startup message is sent, so by the time you see "Untether started", all orphan messages are already resolved.
+
+<!-- TODO: capture screenshot: orphan-cleanup — progress message showing "interrupted by restart" -->
+
+## Auto-continue (Claude Code)
+
+When Claude Code exits after receiving tool results without processing them (an upstream bug), Untether detects the premature exit and automatically resumes the session. You'll see a "⚠️ Auto-continuing" notification in the chat.
+
+Auto-continue is enabled by default. It is suppressed for signal deaths (SIGTERM, SIGKILL) to prevent death spirals under memory pressure.
+
+Configure via `[auto_continue]` in `untether.toml`:
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `enabled` | `true` | Enable automatic session resumption. |
+| `max_retries` | `1` | Maximum consecutive retries per run (1–5). |
+
+See [troubleshooting](troubleshooting.md#claude-code-exits-without-finishing-auto-continue) for details on when this triggers and how to tune it.
+
 ## Run diagnostics
 
 Run the built-in preflight check to validate your configuration:

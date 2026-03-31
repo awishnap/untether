@@ -10,8 +10,8 @@ from .. import __version__
 from ..backends import EngineBackend
 from ..config import read_config
 from ..logging import get_logger
-from ..runner_bridge import ExecBridgeConfig
 from ..markdown import MarkdownFormatter
+from ..runner_bridge import ExecBridgeConfig
 from ..settings import (
     ProgressSettings,
     TelegramTopicsSettings,
@@ -89,18 +89,31 @@ def _build_versions_line(engine_ids: tuple[str, ...]) -> str | None:
     return " · ".join(parts) if len(parts) > 1 else None
 
 
+def _resolve_mode_label(
+    session_mode: str,
+    topics_enabled: bool,
+) -> str:
+    """Derive the workflow mode name from config values."""
+    if session_mode == "stateless":
+        return "handoff"
+    if topics_enabled:
+        return "workspace"
+    return "assistant"
+
+
 def _build_startup_message(
     runtime: TransportRuntime,
     *,
     chat_id: int,
     topics: TelegramTopicsSettings,
+    session_mode: str = "stateless",
     trigger_config: dict | None = None,
 ) -> str:
     project_aliases = sorted(set(runtime.project_aliases()), key=str.lower)
 
-    header = f"\N{DOG} **untether v{__version__} is ready**"
+    header = f"\N{DOG} **untether is ready** (v{__version__})"
 
-    # engine — merged default + available on one line
+    # engines — separate default and installed lines
     available_engines = list(runtime.available_engine_ids())
     missing_engines = list(runtime.missing_engine_ids())
     misconfigured_engines = list(runtime.engine_ids_with_status("bad_config"))
@@ -115,19 +128,23 @@ def _build_startup_message(
     engine_list = ", ".join(available_engines) if available_engines else "none"
 
     details: list[str] = []
+    details.append(f"_default engine:_ `{runtime.default_engine}`")
     if engine_notes:
         details.append(
-            f"engine: `{runtime.default_engine}`"
-            f" · engines: `{engine_list} ({'; '.join(engine_notes)})`"
+            f"_installed engines:_ `{engine_list}` ({'; '.join(engine_notes)})"
         )
     else:
-        details.append(f"engine: `{runtime.default_engine}` · engines: `{engine_list}`")
+        details.append(f"_installed engines:_ `{engine_list}`")
 
-    # projects — listed by name
+    # mode — derived from session_mode + topics
+    mode = _resolve_mode_label(session_mode, topics.enabled)
+    details.append(f"_mode:_ `{mode}`")
+
+    # directories — listed by name
     if project_aliases:
-        details.append(f"projects: `{', '.join(project_aliases)}`")
+        details.append(f"_directories:_ `{', '.join(project_aliases)}`")
     else:
-        details.append("projects: `none`")
+        details.append("_directories:_ `none`")
 
     # topics — only shown when enabled
     if topics.enabled:
@@ -137,18 +154,24 @@ def _build_startup_message(
         scope_label = (
             f"auto ({resolved_scope})" if topics.scope == "auto" else resolved_scope
         )
-        details.append(f"topics: `enabled (scope={scope_label})`")
+        details.append(f"_topics:_ `enabled (scope={scope_label})`")
 
     # triggers — only shown when enabled
     if trigger_config and trigger_config.get("enabled"):
         n_wh = len(trigger_config.get("webhooks", []))
         n_cr = len(trigger_config.get("crons", []))
-        details.append(f"triggers: `enabled ({n_wh} webhooks, {n_cr} crons)`")
+        details.append(f"_triggers:_ `enabled ({n_wh} webhooks, {n_cr} crons)`")
 
-    _DOCS_URL = "https://littlebearapps.com/tools/untether/"
+    _DOCS_URL = (
+        "https://github.com/littlebearapps/untether?tab=readme-ov-file#-help-guides"
+    )
+    _ISSUES_URL = (
+        "https://github.com/littlebearapps/untether?tab=readme-ov-file#-contributing"
+    )
     footer = (
         f"\n\nSend a message to start, or /config for settings."
-        f"\n\N{OPEN BOOK} [Click here for help guide]({_DOCS_URL})"
+        f"\n\n\N{OPEN BOOK} [Click here for help]({_DOCS_URL})"
+        f" | \N{BUG} [Click here to report a bug]({_ISSUES_URL})"
     )
 
     return header + "\n\n" + "\n\n".join(details) + footer
@@ -200,6 +223,7 @@ class TelegramBackend(TransportBackend):
             runtime,
             chat_id=chat_id,
             topics=settings.topics,
+            session_mode=settings.session_mode,
             trigger_config=trigger_config,
         )
         progress_cfg = _load_progress_settings()

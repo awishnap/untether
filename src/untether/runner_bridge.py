@@ -12,11 +12,11 @@ import anyio
 from .context import RunContext
 from .error_hints import get_error_hint as _get_error_hint
 from .logging import bind_run_context, get_logger
+from .markdown import format_meta_line, render_event_cli
 from .model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent, UntetherEvent
 from .presenter import Presenter
-from .markdown import format_meta_line, render_event_cli
-from .runner import Runner
 from .progress import ProgressTracker
+from .runner import Runner
 from .transport import (
     ChannelId,
     MessageId,
@@ -80,7 +80,7 @@ async def delete_outline_messages(session_id: str) -> None:
         try:
             await transport.delete(ref=ref)
         except Exception:  # noqa: BLE001
-            logger.debug("outline_cleanup.delete_failed", exc_info=True)
+            logger.warning("outline_cleanup.delete_failed", exc_info=True)
     refs.clear()
 
 
@@ -93,7 +93,7 @@ _PROGRESS_PERSISTENCE_PATH: Path | None = None
 
 def set_progress_persistence_path(path: Path | None) -> None:
     """Set the path for progress message persistence (called from loop.py)."""
-    global _PROGRESS_PERSISTENCE_PATH  # noqa: PLW0603
+    global _PROGRESS_PERSISTENCE_PATH
     _PROGRESS_PERSISTENCE_PATH = path
 
 
@@ -113,7 +113,7 @@ def _load_footer_settings():
         settings, _ = result
         return settings.footer
     except Exception:  # noqa: BLE001
-        logger.debug("footer_settings.load_failed", exc_info=True)
+        logger.warning("footer_settings.load_failed", exc_info=True)
         from .settings import FooterSettings
 
         return FooterSettings()
@@ -130,8 +130,71 @@ def _load_watchdog_settings():
         settings, _ = result
         return settings.watchdog
     except Exception:  # noqa: BLE001
-        logger.debug("watchdog_settings.load_failed", exc_info=True)
+        logger.warning("watchdog_settings.load_failed", exc_info=True)
         return None
+
+
+def _load_auto_continue_settings():
+    """Load auto-continue settings from config, returning defaults if unavailable."""
+    try:
+        from .settings import AutoContinueSettings, load_settings_if_exists
+
+        result = load_settings_if_exists()
+        if result is None:
+            return AutoContinueSettings()
+        settings, _ = result
+        return settings.auto_continue
+    except Exception:  # noqa: BLE001
+        logger.warning("auto_continue_settings.load_failed", exc_info=True)
+        from .settings import AutoContinueSettings
+
+        return AutoContinueSettings()
+
+
+def _is_signal_death(rc: int | None) -> bool:
+    """Return True if the return code indicates the process was killed by a signal.
+
+    rc=143 (SIGTERM/128+15), rc=137 (SIGKILL/128+9), or negative values
+    (Python's representation of signal death, e.g. -9 for SIGKILL).
+    """
+    if rc is None:
+        return False
+    if rc < 0:
+        return True  # negative = killed by signal (Python convention)
+    return rc > 128  # 128+N = killed by signal N (shell convention)
+
+
+def _should_auto_continue(
+    *,
+    last_event_type: str | None,
+    engine: str,
+    cancelled: bool,
+    resume_value: str | None,
+    auto_continued_count: int,
+    max_retries: int,
+    proc_returncode: int | None = None,
+) -> bool:
+    """Detect Claude Code silent session termination bug (#34142, #30333).
+
+    Returns True when the last raw JSONL event was a tool_result ("user")
+    meaning Claude never got a turn to process the results before the CLI
+    exited.
+
+    Does NOT trigger on signal deaths (SIGTERM/SIGKILL from earlyoom or
+    other external killers) — those have rc>128 or rc<0.  The upstream bug
+    exits with rc=0.
+    """
+    if cancelled:
+        return False
+    if engine != "claude":
+        return False
+    if last_event_type != "user":
+        return False
+    if not resume_value:
+        return False
+    if _is_signal_death(proc_returncode):
+        return False
+    return auto_continued_count < max_retries
 
 
 _DEFAULT_PREAMBLE = (
@@ -175,7 +238,7 @@ def _load_preamble_settings():
         settings, _ = result
         return settings.preamble
     except Exception:  # noqa: BLE001
-        logger.debug("preamble_settings.load_failed", exc_info=True)
+        logger.warning("preamble_settings.load_failed", exc_info=True)
         from .settings import PreambleSettings
 
         return PreambleSettings()
@@ -228,9 +291,9 @@ def _resolve_presenter(
     overridden verbosity. Otherwise returns the default.
     """
     try:
-        from .telegram.commands.verbose import get_verbosity_override
-        from .telegram.bridge import TelegramPresenter
         from .markdown import MarkdownFormatter
+        from .telegram.bridge import TelegramPresenter
+        from .telegram.commands.verbose import get_verbosity_override
 
         override = get_verbosity_override(channel_id)
         if override is None:
@@ -279,7 +342,10 @@ async def _maybe_append_usage_footer(
             compact = format_usage_compact(data)
             if compact:
                 footer = f"\n\u26a1 {compact}"
-                return RenderedMessage(text=msg.text + footer, extra=msg.extra)
+                return RenderedMessage(
+                    text=_insert_before_resume(msg.text, footer),
+                    extra=msg.extra,
+                )
             return msg
 
         # Threshold-based warning (existing behaviour)
@@ -304,7 +370,9 @@ async def _maybe_append_usage_footer(
             _7d_part = f" | 7d: {pct_7d:.0f}%" if pct_7d else ""
             footer = f"\n\u26a15h: {pct_5h:.0f}% ({reset}){_7d_part}"
 
-        return RenderedMessage(text=msg.text + footer, extra=msg.extra)
+        return RenderedMessage(
+            text=_insert_before_resume(msg.text, footer), extra=msg.extra
+        )
     except Exception:  # noqa: BLE001 — cosmetic footer must never block final message
         logger.debug("usage_footer.failed", exc_info=True)
         return msg
@@ -505,6 +573,17 @@ def _flatten_exception_group(error: BaseException) -> list[BaseException]:
     return [error]
 
 
+_RESUME_LINE_MARKER = "\n\n\u21a9\ufe0f "  # ↩️ with variation selector
+
+
+def _insert_before_resume(text: str, insertion: str) -> str:
+    """Insert text before the resume line, or append at end if no resume line."""
+    if _RESUME_LINE_MARKER in text:
+        idx = text.index(_RESUME_LINE_MARKER)
+        return text[:idx] + insertion + text[idx:]
+    return text + insertion
+
+
 def _format_error(error: BaseException) -> str:
     cancel_exc = anyio.get_cancelled_exc_class()
     flattened = [
@@ -656,6 +735,8 @@ class ProgressEdits:
         self._prev_diag: Any = None
         self._stall_check_interval: float = 60.0
         self._stall_repeat_seconds: float = 180.0
+        self._prev_recent_events: list[tuple[float, str]] | None = None
+        self._frozen_ring_count: int = 0
         self.pid: int | None = None
         self.stream: Any = None  # JsonlStreamState, set from run_runner_with_cancel
         self.cancel_event: anyio.Event | None = None  # threaded from RunningTask
@@ -682,7 +763,7 @@ class ProgressEdits:
 
     async def _stall_monitor(self) -> None:
         """Periodically check for event stalls, log diagnostics, and notify."""
-        from .utils.proc_diag import collect_proc_diag, format_diag, is_cpu_active
+        from .utils.proc_diag import collect_proc_diag, is_cpu_active
 
         while True:
             await anyio.sleep(self._stall_check_interval)
@@ -690,9 +771,13 @@ class ProgressEdits:
             self._peak_idle = max(self._peak_idle, elapsed)
 
             # Use longer threshold when waiting for user approval or running a tool
+            mcp_server = self._has_running_mcp_tool()
             if self._has_pending_approval():
                 threshold = self._STALL_THRESHOLD_APPROVAL
                 threshold_reason = "pending_approval"
+            elif mcp_server is not None:
+                threshold = self._STALL_THRESHOLD_MCP_TOOL
+                threshold_reason = "running_mcp_tool"
             elif self._has_running_tool():
                 threshold = self._STALL_THRESHOLD_TOOL
                 threshold_reason = "running_tool"
@@ -810,16 +895,39 @@ class ProgressEdits:
                 self.signal_send.close()
                 return
 
+            # Track whether the recent_events ring buffer has changed since
+            # last stall check.  A frozen buffer means no new JSONL events
+            # arrived — the process may be stuck in a retry loop despite
+            # burning CPU.
+            recent_snapshot = [(round(t, 1), lbl) for t, lbl in recent[-5:]]
+            if self._prev_recent_events == recent_snapshot:
+                self._frozen_ring_count += 1
+            else:
+                self._frozen_ring_count = 0
+            self._prev_recent_events = recent_snapshot
+
             # Suppress Telegram notification when process is CPU-active
             # (extended thinking, background agents). Instead, trigger a
             # heartbeat re-render so the elapsed time counter keeps ticking.
-            if cpu_active is True:
+            #
+            # Exception 1: if the ring buffer has been frozen for 3+ checks,
+            # the process is likely stuck (retry loop, hung API call, dead
+            # thinking) — escalate to a notification despite CPU activity.
+            # Exception 2: if the main process is sleeping (state=S), CPU
+            # activity is from child processes (hung Bash tool, stuck curl),
+            # not from Claude doing extended thinking — notify the user.
+            _FROZEN_ESCALATION_THRESHOLD = 3
+            frozen_escalate = self._frozen_ring_count >= _FROZEN_ESCALATION_THRESHOLD
+            main_sleeping = diag is not None and diag.state == "S"
+            _tool_running = self._has_running_tool() or mcp_server is not None
+            if cpu_active is True and not frozen_escalate and not main_sleeping:
                 logger.info(
                     "progress_edits.stall_suppressed_notification",
                     channel_id=self.channel_id,
                     seconds_since_last_event=round(elapsed, 1),
                     stall_warn_count=self._stall_warn_count,
                     pid=self.pid,
+                    frozen_ring_count=self._frozen_ring_count,
                 )
                 # Heartbeat: bump event_seq to wake the render loop and
                 # refresh the progress message with updated elapsed time.
@@ -831,16 +939,129 @@ class ProgressEdits:
                     anyio.ClosedResourceError,
                 ):
                     self.signal_send.send_nowait(None)
+            elif (
+                cpu_active is True
+                and main_sleeping
+                and _tool_running
+                and self._stall_warn_count > 1
+            ):
+                # Tool subprocess actively working — first warning already
+                # sent, suppress repeats until CPU goes idle.  The ring
+                # buffer being "frozen" is expected when a tool runs (no
+                # JSONL events while waiting for a child process), so we
+                # intentionally do NOT check frozen_escalate here.
+                # Keeps #168 fix (first warning fires for sleeping+child
+                # scenarios) while eliminating spam for legitimately
+                # long-running commands.
+                logger.info(
+                    "progress_edits.stall_tool_active_suppressed",
+                    channel_id=self.channel_id,
+                    seconds_since_last_event=round(elapsed, 1),
+                    stall_warn_count=self._stall_warn_count,
+                    pid=self.pid,
+                )
+                self.event_seq += 1
+                with contextlib.suppress(
+                    anyio.WouldBlock,
+                    anyio.BrokenResourceError,
+                    anyio.ClosedResourceError,
+                ):
+                    self.signal_send.send_nowait(None)
             else:
-                # Telegram notification (cpu_active=False or None)
-                parts = [f"⏳ No progress for {int(elapsed // 60)} min"]
+                # Telegram notification (cpu_active=False/None, or frozen
+                # ring buffer escalation despite CPU activity)
+                mins = int(elapsed // 60)
+                mcp_hung = mcp_server is not None and frozen_escalate
+                if mcp_hung:
+                    logger.warning(
+                        "progress_edits.mcp_tool_hung",
+                        channel_id=self.channel_id,
+                        mcp_server=mcp_server,
+                        frozen_ring_count=self._frozen_ring_count,
+                        seconds_since_last_event=round(elapsed, 1),
+                        pid=self.pid,
+                    )
+                    parts = [
+                        f"⏳ MCP tool may be hung: {mcp_server} ({mins} min, no new events)"
+                    ]
+                elif frozen_escalate:
+                    logger.warning(
+                        "progress_edits.frozen_ring_escalation",
+                        channel_id=self.channel_id,
+                        frozen_ring_count=self._frozen_ring_count,
+                        seconds_since_last_event=round(elapsed, 1),
+                        pid=self.pid,
+                    )
+                    # When a known tool is running and main process is sleeping
+                    # (waiting for child), use reassuring message instead of
+                    # alarming "No progress" — the tool subprocess is working.
+                    _frozen_tool = None
+                    if last_action:
+                        for _pfx in ("tool:", "note:", "command:"):
+                            if last_action.startswith(_pfx):
+                                _rest = last_action[len(_pfx) :]
+                                _frozen_tool = (
+                                    "Bash"
+                                    if _pfx == "command:"
+                                    else _rest.split(" ", 1)[0].split(":", 1)[0]
+                                )
+                                break
+                    if _frozen_tool and main_sleeping and cpu_active is True:
+                        parts = [
+                            f"⏳ {_frozen_tool} command still running ({mins} min)"
+                        ]
+                    else:
+                        parts = [
+                            f"⏳ No progress for {mins} min (CPU active, no new events)"
+                        ]
+                elif mcp_server is not None:
+                    parts = [f"⏳ MCP tool running: {mcp_server} ({mins} min)"]
+                else:
+                    # Extract tool name from last running action for
+                    # actionable stall messages ("Bash command still running"
+                    # instead of generic "session may be stuck").
+                    _tool_name = None
+                    if last_action:
+                        for _prefix in ("tool:", "note:", "command:"):
+                            if last_action.startswith(_prefix):
+                                _rest = last_action[len(_prefix) :]
+                                _raw = _rest.split(" ", 1)[0].split(":", 1)[0]
+                                # Map kind prefix to user-friendly name
+                                _tool_name = "Bash" if _prefix == "command:" else _raw
+                                break
+                    if _tool_name and main_sleeping:
+                        if cpu_active is True:
+                            parts = [
+                                f"⏳ {_tool_name} command still running ({mins} min)"
+                            ]
+                        else:
+                            parts = [
+                                f"⏳ {_tool_name} tool may be stuck ({mins} min, no CPU activity)"
+                            ]
+                    elif cpu_active is True:
+                        parts = [f"⏳ Still working ({mins} min, CPU active)"]
+                    else:
+                        parts = [f"⏳ No progress for {mins} min"]
                 if self._stall_warn_count > 1:
                     parts[0] += f" (warned {self._stall_warn_count}x)"
-                parts.append("— session may be stuck.")
+                # "session may be stuck" — only when genuinely stuck
+                # (no tool identified, cpu not active, not MCP/frozen)
+                _genuinely_stuck = (
+                    not mcp_hung
+                    and not frozen_escalate
+                    and mcp_server is None
+                    and not (_tool_name and main_sleeping)
+                    and cpu_active is not True
+                )
+                if _genuinely_stuck:
+                    parts.append("— session may be stuck.")
                 if last_action:
-                    parts.append(f"Last: {last_action}")
-                if diag:
-                    parts.append(f"PID {diag.pid}: {format_diag(diag)}")
+                    _summary = (
+                        last_action
+                        if len(last_action) <= 80
+                        else last_action[:77] + "..."
+                    )
+                    parts.append(f"Last: {_summary}")
                 parts.append("/cancel to stop.")
                 text = "\n".join(parts)
                 try:
@@ -872,6 +1093,23 @@ class ProgressEdits:
                 return True
             break  # only check the most recent
         return False
+
+    def _has_running_mcp_tool(self) -> str | None:
+        """Return the MCP server name if the most recent action is a running MCP tool.
+
+        MCP tool names follow the pattern: mcp__<server>__<tool_name>.
+        Returns the server name (e.g. 'cloudflare-observability') or None.
+        """
+        for action_state in reversed(list(self.tracker._actions.values())):
+            if not action_state.completed:
+                name = (
+                    action_state.action.detail.get("name") or action_state.action.title
+                )
+                if isinstance(name, str) and name.startswith("mcp__"):
+                    parts = name.split("__", 2)
+                    return parts[1] if len(parts) >= 2 else name
+            break  # only check the most recent
+        return None
 
     def _last_action_summary(self) -> str | None:
         """Return a short description of the most recent action."""
@@ -916,11 +1154,20 @@ class ProgressEdits:
             )
             has_approval = len(new_kb) > 1
             had_approval = len(old_kb) > 1
+            # Track raw source state before stripping (#163)
+            source_has_approval = has_approval
 
-            # If the callback handler already cleaned up outline messages
-            # (via delete_outline_messages), the synthetic discuss_approve
-            # action still renders stale buttons. Force cancel-only keyboard.
-            if self._outline_sent and not self._outline_refs and has_approval:
+            # When outline has been sent (visible or already cleaned up),
+            # strip approval buttons from the progress message — the outline
+            # message has the canonical approval buttons.  (#163)
+            # Only strip for outline-related approvals (DiscussApproval),
+            # not for regular tool approvals (e.g. Write with diff preview).
+            _current_is_outline = any(
+                a.action.detail.get("request_type") == "DiscussApproval"
+                for a in state.actions
+                if not a.completed
+            )
+            if self._outline_sent and has_approval and _current_is_outline:
                 cancel_row = new_kb[-1:]  # keep only the cancel row
                 rendered = RenderedMessage(
                     text=rendered.text,
@@ -943,11 +1190,9 @@ class ProgressEdits:
                         outline_text = a.action.detail.get("outline_full_text")
                         if outline_text and isinstance(outline_text, str):
                             self._outline_sent = True
-                            # Pass approval rows (exclude cancel) for the last outline msg
+                            # Full keyboard (including cancel) for outline msg (#163)
                             approval_kb = (
-                                {"inline_keyboard": new_kb[:-1]}
-                                if len(new_kb) > 1
-                                else None
+                                {"inline_keyboard": new_kb} if len(new_kb) > 1 else None
                             )
                             await self._send_outline(
                                 outline_text,
@@ -957,6 +1202,18 @@ class ProgressEdits:
                                     state.resume.value if state.resume else None
                                 ),
                             )
+                            # Strip approval from progress this cycle too —
+                            # outline message has the canonical buttons (#163)
+                            cancel_row = new_kb[-1:]
+                            rendered = RenderedMessage(
+                                text=rendered.text,
+                                extra={
+                                    **rendered.extra,
+                                    "reply_markup": {"inline_keyboard": cancel_row},
+                                },
+                            )
+                            new_kb = cancel_row
+                            has_approval = False
                             break
 
                 if has_approval and not had_approval and not self._approval_notified:
@@ -1034,6 +1291,11 @@ class ProgressEdits:
 
                     bg_tg.start_soon(_delete_outlines, outline_refs)
 
+                # Reset outline state when source stops providing approval,
+                # so future ExitPlanMode can show buttons on progress (#163)
+                if self._outline_sent and not source_has_approval:
+                    self._outline_sent = False
+
                 if rendered != self.last_rendered:
                     # Log keyboard transitions at info level for #103/#104 diagnostics
                     if has_approval and not had_approval:
@@ -1074,6 +1336,7 @@ class ProgressEdits:
 
     _STALL_THRESHOLD_SECONDS: float = 300.0  # 5 minutes
     _STALL_THRESHOLD_TOOL: float = 600.0  # 10 minutes when a tool is actively running
+    _STALL_THRESHOLD_MCP_TOOL: float = 900.0  # 15 min for MCP tools (network-bound)
     _STALL_THRESHOLD_APPROVAL: float = 1800.0  # 30 minutes when waiting for approval
     _STALL_MAX_WARNINGS: int = 10  # absolute cap
     _STALL_MAX_WARNINGS_NO_PID: int = 3  # aggressive cap when pid=None + no events
@@ -1095,6 +1358,8 @@ class ProgressEdits:
             self._stall_warned = False
             self._stall_warn_count = 0
             self._prev_diag = None
+            self._frozen_ring_count = 0
+            self._prev_recent_events = None
         self._last_event_at = now
         self.event_seq += 1
         try:
@@ -1306,7 +1571,10 @@ async def run_runner_with_cancel(
                         _log_runner_event(evt)
                         if isinstance(evt, StartedEvent):
                             outcome.resume = evt.resume
-                            bind_run_context(resume=evt.resume.value)
+                            bind_run_context(
+                                resume=evt.resume.value,
+                                session_id=evt.resume.value,
+                            )
                             # Thread PID and stream to ProgressEdits
                             if evt.meta:
                                 pid = evt.meta.get("pid")
@@ -1456,6 +1724,7 @@ async def handle_message(
     on_resume_failed: Callable[[ResumeToken], Awaitable[None]] | None = None,
     progress_ref: MessageRef | None = None,
     clock: Callable[[], float] = time.monotonic,
+    _auto_continued_count: int = 0,
 ) -> None:
     logger.info(
         "handle.incoming",
@@ -1511,6 +1780,8 @@ async def handle_message(
     watchdog = _load_watchdog_settings()
     if watchdog is not None:
         edits._stall_repeat_seconds = watchdog.stall_repeat_seconds
+        edits._STALL_THRESHOLD_TOOL = watchdog.tool_timeout
+        edits._STALL_THRESHOLD_MCP_TOOL = watchdog.mcp_tool_timeout
         if hasattr(runner, "_LIVENESS_TIMEOUT_SECONDS"):
             runner._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
         if hasattr(runner, "_stall_auto_kill"):
@@ -1563,7 +1834,7 @@ async def handle_message(
                     running_tasks.pop(progress_ref, None)
             if not outcome.cancelled and error is None:
                 # Give pending progress edits a chance to flush if they're ready.
-                await anyio.sleep(0)
+                await anyio.lowlevel.checkpoint()
             # Clean up any remaining ephemeral notification messages.
             await edits.delete_ephemeral()
             edits_scope.cancel()
@@ -1575,7 +1846,9 @@ async def handle_message(
         err_body = _format_error(error)
         hint = _get_error_hint(err_body)
         if hint:
-            err_body = f"{err_body}\n\n\N{ELECTRIC LIGHT BULB} {hint}"
+            err_body = f"\N{ELECTRIC LIGHT BULB} {hint}\n\n```\n{err_body}\n```"
+        else:
+            err_body = f"```\n{err_body}\n```"
         state = progress_tracker.snapshot(
             resume_formatter=runner.format_resume,
             context_line=context_line,
@@ -1658,6 +1931,70 @@ async def handle_message(
     run_ok = completed.ok
     run_error = completed.error
 
+    # --- Auto-continue: mitigate Claude Code bug #34142/#30333 ---
+    # When Claude Code's turn state machine incorrectly ends a session
+    # after receiving tool results (last JSONL event is "user" type),
+    # auto-resume so the user doesn't have to manually continue.
+    ac_settings = _load_auto_continue_settings()
+    _ac_resume = completed.resume or outcome.resume
+    _ac_last_event = edits.stream.last_event_type if edits.stream else None
+    _ac_proc_rc = edits.stream.proc_returncode if edits.stream else None
+    if ac_settings.enabled and _should_auto_continue(
+        last_event_type=_ac_last_event,
+        engine=runner.engine,
+        cancelled=outcome.cancelled,
+        resume_value=_ac_resume.value if _ac_resume else None,
+        auto_continued_count=_auto_continued_count,
+        max_retries=ac_settings.max_retries,
+        proc_returncode=_ac_proc_rc,
+    ):
+        logger.warning(
+            "session.auto_continue",
+            session_id=_ac_resume.value if _ac_resume else None,
+            engine=runner.engine,
+            last_event_type=_ac_last_event,
+            attempt=_auto_continued_count + 1,
+            max_retries=ac_settings.max_retries,
+        )
+        notice = (
+            "\u26a0\ufe0f Auto-continuing \u2014 "
+            "Claude stopped before processing tool results"
+        )
+        if _auto_continued_count > 0:
+            notice += f" (attempt {_auto_continued_count + 1})"
+        notice_msg = RenderedMessage(text=notice, extra={})
+        await cfg.transport.send(
+            channel_id=incoming.channel_id,
+            message=notice_msg,
+            options=SendOptions(
+                reply_to=user_ref,
+                notify=True,
+                thread_id=incoming.thread_id,
+            ),
+        )
+        await handle_message(
+            cfg,
+            runner=runner,
+            incoming=IncomingMessage(
+                channel_id=incoming.channel_id,
+                message_id=incoming.message_id,
+                text="continue",
+                reply_to=incoming.reply_to,
+                thread_id=incoming.thread_id,
+            ),
+            resume_token=_ac_resume,
+            context=context,
+            context_line=context_line,
+            strip_resume_line=strip_resume_line,
+            running_tasks=running_tasks,
+            on_thread_known=on_thread_known,
+            on_resume_failed=on_resume_failed,
+            clock=clock,
+            _auto_continued_count=_auto_continued_count + 1,
+        )
+        return
+    # --- End auto-continue ---
+
     final_answer = completed.answer
 
     # If there's a plan outline stored in a synthetic warning action,
@@ -1696,25 +2033,38 @@ async def handle_message(
                 logger.debug("session.auto_clear_failed", exc_info=True)
 
     if run_ok is False and run_error:
-        error_text = str(run_error)
-        hint = _get_error_hint(error_text)
-        if hint:
-            error_text = f"{error_text}\n\n\N{ELECTRIC LIGHT BULB} {hint}"
+        raw_error = str(run_error)
+        hint = _get_error_hint(raw_error)
         if final_answer.strip():
             # Deduplicate: if the answer already starts with the error's first
             # line (common when runner sets both answer and error from the same
             # source, e.g. Claude Code subscription limits), only append the
             # diagnostic context and hint — not the repeated summary.
-            error_head = error_text.split("\n", 1)[0].strip()
+            error_head = raw_error.split("\n", 1)[0].strip()
             answer_head = final_answer.strip().split("\n", 1)[0].strip()
             if error_head and error_head == answer_head:
-                _, _, remainder = error_text.partition("\n")
+                _, _, remainder = raw_error.partition("\n")
+                parts: list[str] = [final_answer]
+                if hint:
+                    parts.append(f"\N{ELECTRIC LIGHT BULB} {hint}")
                 if remainder.strip():
-                    final_answer = f"{final_answer}\n\n{remainder.strip()}"
+                    parts.append(f"```\n{remainder.strip()}\n```")
+                final_answer = "\n\n".join(parts)
             else:
+                if hint:
+                    error_text = (
+                        f"\N{ELECTRIC LIGHT BULB} {hint}\n\n```\n{raw_error}\n```"
+                    )
+                else:
+                    error_text = f"```\n{raw_error}\n```"
                 final_answer = f"{final_answer}\n\n{error_text}"
         else:
-            final_answer = error_text
+            if hint:
+                final_answer = (
+                    f"\N{ELECTRIC LIGHT BULB} {hint}\n\n```\n{raw_error}\n```"
+                )
+            else:
+                final_answer = f"```\n{raw_error}\n```"
 
     status = (
         "error" if run_ok is False else ("done" if final_answer.strip() else "error")
@@ -1794,13 +2144,16 @@ async def handle_message(
                 else ""
             )
             final_rendered = RenderedMessage(
-                text=final_rendered.text + f"\n\U0001f4b0{cost_line}{budget_suffix}",
+                text=_insert_before_resume(
+                    final_rendered.text,
+                    f"\n\U0001f4b0{cost_line}{budget_suffix}",
+                ),
                 extra=final_rendered.extra,
             )
     elif _cost_alert_text:
         # Budget exceeded but cost display is off — show standalone alert
         final_rendered = RenderedMessage(
-            text=final_rendered.text + f"\n{_cost_alert_text}",
+            text=_insert_before_resume(final_rendered.text, f"\n{_cost_alert_text}"),
             extra=final_rendered.extra,
         )
 

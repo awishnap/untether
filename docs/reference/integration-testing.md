@@ -23,16 +23,16 @@ All integration test tiers are fully automated by Claude Code using Telegram MCP
 
 ### Test chats
 
-Tests are sent to 6 dedicated `ut-dev:` engine chats via `@untether_dev_bot`:
+Tests are sent to 6 dedicated `ut-dev-hf:` engine chats via `@untether_dev_bot`:
 
 | Chat | Chat ID |
 |------|---------|
-| `ut-dev: claude` | 5284581592 |
-| `ut-dev: codex` | 4929463515 |
-| `ut-dev: opencode` | 5200822877 |
-| `ut-dev: pi` | 5156256333 |
-| `ut-dev: gemini` | 5207762142 |
-| `ut-dev: amp` | 5230875989 |
+| `ut-dev-hf: claude` | 5171122044 |
+| `ut-dev-hf: codex` | 5116709786 |
+| `ut-dev-hf: opencode` | 5020138767 |
+| `ut-dev-hf: pi` | 5276373372 |
+| `ut-dev-hf: gemini` | 5152406011 |
+| `ut-dev-hf: amp` | 5064468679 |
 
 ### Workflow
 
@@ -108,7 +108,7 @@ Run in the Claude test chat only. Requires plan mode ON for most tests.
 |---|------|-------------|----------------|---------|
 | C1 | **Tool approval** | Send a prompt requiring Bash (e.g. `run ls -la`), with plan mode ON | Approve/Deny/Discuss buttons appear, clicking Approve proceeds, tool executes | #104 (buttons not appearing), #103 (progress stuck) |
 | C2 | **Tool denial** | Same as C1, click Deny | Denial message reaches Claude, Claude acknowledges and continues | #66 (deny retry loop) |
-| C3 | **Plan mode outline** | Send a complex prompt, click "Pause & Outline Plan" | Claude writes outline, then Approve/Deny buttons appear automatically | Cooldown mechanics (#87), post-outline approval |
+| C3 | **Plan mode outline** | Send a complex prompt, click "Pause & Outline Plan" | Claude writes outline, then Approve/Deny/Let's discuss buttons appear automatically | Cooldown mechanics (#87), post-outline approval |
 | C4 | **Ask question** | Send a prompt that triggers AskUserQuestion (e.g. `should I use TypeScript or JavaScript for this?`) | Question appears with option buttons, user reply routes back to Claude | AskUserQuestion flow |
 | C5 | **Diff preview** | With plan mode ON, send a prompt that edits a file | Diff preview shows in approval message (old/new lines) | Diff preview rendering |
 | C6 | **Rapid approve/deny** | Approve a tool, then quickly deny the next one | No spinner hang, no stale buttons, clean state transitions | Early callback answering, button cleanup |
@@ -165,7 +165,7 @@ Harder to trigger but catches the most production bugs.
 
 | # | Test | What to send | What to verify | Catches |
 |---|------|-------------|----------------|---------|
-| S1 | **Stall detection** | Send a prompt likely to take >5 minutes, or `kill -STOP` the engine process | Stall warning appears in Telegram after threshold, `/proc` diagnostics available | #95 (stall not detected), #97 (no diagnostics), #99 (stall loops), #105 (stall during tools) |
+| S1 | **Stall detection** | Send a prompt likely to take >5 minutes, or `kill -STOP` the engine process. For MCP tool threshold: send a prompt that triggers a slow MCP tool (e.g. Cloudflare observability query) | Stall warning appears in Telegram after threshold; MCP tool stalls show "MCP tool running: {server}" instead of "session may be stuck"; `/proc` diagnostics available | #95 (stall not detected), #97 (no diagnostics), #99 (stall loops), #105 (stall during tools), #154 (MCP tool threshold) |
 | S2 | **Concurrent sessions** | Send prompts in two different engine chats simultaneously | Both run independently, no cross-contamination, both complete | Session isolation |
 | S3 | **Bot restart mid-run** | Start a run, then `/restart` | Active run drains gracefully, bot restarts, can start new runs | Graceful restart, drain logic |
 | S4 | **Verbose mode** | `/verbose` on, then send a prompt | Progress shows tool details (file paths, commands, patterns) | Verbose rendering |
@@ -410,7 +410,7 @@ When detected, note the engine, chat ID, message IDs, and exact behaviour. Creat
 
 ### Timing and determinism
 
-- **Stall tests (S1)** are timing-dependent — thresholds vary by `[watchdog]` config. Check `~/.untether-dev/untether.toml` for current values.
+- **Stall tests (S1)** are timing-dependent — thresholds vary by `[watchdog]` config and by context (5 min normal, 10 min local tool, 15 min MCP tool, 30 min approval). Check `~/.untether-dev/untether.toml` for current values.
 - **Ask question (C4)** is hard to trigger deterministically — Claude decides when to ask. Try ambiguous prompts.
 - **Forward coalescing (T4)** depends on `forward_coalesce_s` debounce window — send forwards quickly enough to be within the window.
 - **Budget auto-cancel (B1)** depends on how fast the engine reports costs — some engines report at the end, not incrementally.

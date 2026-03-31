@@ -10,28 +10,32 @@ from typing import TYPE_CHECKING, cast
 import anyio
 from anyio.abc import TaskGroup
 
-from ..config import ConfigError
-from ..config_watch import ConfigReload, watch_config as watch_config_changes
 from ..commands import list_command_ids
+from ..config import ConfigError
+from ..config_watch import ConfigReload
+from ..config_watch import watch_config as watch_config_changes
+from ..context import RunContext
 from ..directives import DirectiveError
+from ..ids import RESERVED_CHAT_COMMANDS
 from ..logging import get_logger
 from ..model import EngineId, ResumeToken
+from ..progress import ProgressTracker
 from ..runners.run_options import EngineRunOptions
 from ..scheduler import ThreadJob, ThreadScheduler
-from ..progress import ProgressTracker
 from ..settings import TelegramTransportSettings
 from ..transport import MessageRef, SendOptions
 from ..transport_runtime import ResolvedMessage
-from ..context import RunContext
-from ..ids import RESERVED_CHAT_COMMANDS
 from .bridge import CANCEL_CALLBACK_DATA, TelegramBridgeConfig, send_plain
+from .chat_prefs import ChatPrefsStore, resolve_prefs_path
+from .chat_sessions import ChatSessionStore, resolve_sessions_path
+from .client import poll_incoming
 from .commands.cancel import handle_callback_cancel, handle_cancel
 from .commands.file_transfer import FILE_PUT_USAGE
 from .commands.handlers import (
     dispatch_callback,
     dispatch_command,
+    get_reserved_commands,
     handle_agent_command,
-    parse_callback_data,
     handle_chat_ctx_command,
     handle_chat_new_command,
     handle_ctx_command,
@@ -43,8 +47,8 @@ from .commands.handlers import (
     handle_reasoning_command,
     handle_topic_command,
     handle_trigger_command,
+    parse_callback_data,
     parse_slash_command,
-    get_reserved_commands,
     run_engine,
     save_file_put,
     set_command_menu,
@@ -53,6 +57,9 @@ from .commands.handlers import (
 from .commands.parse import is_cancel_command
 from .commands.reply import make_reply
 from .context import _merge_topic_context, _usage_ctx_set, _usage_topic
+from .engine_defaults import resolve_engine_for_message
+from .engine_overrides import merge_overrides
+from .topic_state import TopicStateStore, resolve_state_path
 from .topics import (
     _maybe_rename_topic,
     _resolve_topics_scope,
@@ -61,12 +68,6 @@ from .topics import (
     _topics_chat_project,
     _validate_topics_setup,
 )
-from .client import poll_incoming
-from .chat_prefs import ChatPrefsStore, resolve_prefs_path
-from .chat_sessions import ChatSessionStore, resolve_sessions_path
-from .engine_overrides import merge_overrides
-from .engine_defaults import resolve_engine_for_message
-from .topic_state import TopicStateStore, resolve_state_path
 from .trigger_mode import resolve_trigger_mode, should_trigger_run
 from .types import (
     TelegramCallbackQuery,
@@ -216,17 +217,46 @@ def _dispatch_builtin_command(
         task_group.start_soon(handler)
         return True
 
-    if cfg.topics.enabled and topic_store is not None:
-        if command_id == "new":
-            handler = partial(
+    if command_id == "new":
+        topic_key = (
+            _topic_key(msg, cfg, scope_chat_ids=scope_chat_ids)
+            if cfg.topics.enabled and topic_store is not None
+            else None
+        )
+        if topic_key is not None:
+            handler: Callable[..., Awaitable[None]] = partial(
                 handle_new_command,
                 cfg,
                 msg,
                 topic_store,
                 resolved_scope=resolved_scope,
                 scope_chat_ids=scope_chat_ids,
+                running_tasks=ctx.running_tasks,
             )
-        elif command_id == "topic":
+        elif ctx.chat_session_store is not None:
+            handler = partial(
+                handle_chat_new_command,
+                cfg,
+                msg,
+                ctx.chat_session_store,
+                ctx.chat_session_key,
+                running_tasks=ctx.running_tasks,
+            )
+        else:
+            # Stateless mode: just cancel running tasks and reply
+            async def _stateless_new() -> None:
+                from .commands.topics import _cancel_chat_tasks
+
+                cancelled = _cancel_chat_tasks(msg.chat_id, ctx.running_tasks)
+                label = "cancelled run" if cancelled else "no stored sessions to clear"
+                await reply(text=f"{label} for this chat.")
+
+            handler = _stateless_new
+        task_group.start_soon(handler)
+        return True
+
+    if cfg.topics.enabled and topic_store is not None:
+        if command_id == "topic":
             handler = partial(
                 handle_topic_command,
                 cfg,
@@ -442,6 +472,9 @@ class TelegramCommandContext:
     scope_chat_ids: frozenset[int]
     reply: Callable[..., Awaitable[None]]
     task_group: TaskGroup
+    running_tasks: RunningTasks | None = None
+    chat_session_store: ChatSessionStore | None = None
+    chat_session_key: tuple[int, int | None] | None = None
 
 
 def _classify_message(
@@ -879,6 +912,12 @@ class MediaGroupBuffer:
                     self._run_prompt_from_upload,
                     self._resolve_prompt_message,
                 )
+                logger.debug(
+                    "media_group.flush.ok",
+                    chat_id=key[0],
+                    media_group_id=key[1],
+                    message_count=len(messages),
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "media_group.flush.failed",
@@ -1123,6 +1162,18 @@ async def run_main_loop(
         }
         state.reserved_commands = get_reserved_commands(cfg.runtime)
 
+    import signal as _signal
+
+    from ..shutdown import (
+        DRAIN_TIMEOUT_S,
+        is_shutting_down,
+        request_shutdown,
+        reset_shutdown,
+    )
+
+    _prev_sigterm = _signal.getsignal(_signal.SIGTERM)
+    _prev_sigint = _signal.getsignal(_signal.SIGINT)
+
     try:
         config_path = cfg.runtime.config_path
         if config_path is not None:
@@ -1188,17 +1239,6 @@ async def run_main_loop(
         else:
             logger.info("trigger_mode.bot_username.unavailable")
         # Install graceful shutdown signal handlers
-        import signal as _signal
-
-        from ..shutdown import (
-            DRAIN_TIMEOUT_S,
-            is_shutting_down,
-            request_shutdown,
-            reset_shutdown,
-        )
-
-        _prev_sigterm = _signal.getsignal(_signal.SIGTERM)
-        _prev_sigint = _signal.getsignal(_signal.SIGINT)
 
         def _shutdown_handler(signum: int, frame: object) -> None:
             request_shutdown()
@@ -1441,10 +1481,10 @@ async def run_main_loop(
 
             # --- Trigger system (webhooks + cron) ---
             if cfg.trigger_config and cfg.trigger_config.get("enabled"):
-                from ..triggers.settings import parse_trigger_config
+                from ..triggers.cron import run_cron_scheduler
                 from ..triggers.dispatcher import TriggerDispatcher
                 from ..triggers.server import run_webhook_server
-                from ..triggers.cron import run_cron_scheduler
+                from ..triggers.settings import parse_trigger_config
 
                 try:
                     trigger_settings = parse_trigger_config(cfg.trigger_config)
@@ -1865,41 +1905,6 @@ async def run_main_loop(
 
                 command_id = classification.command_id
                 args_text = classification.args_text
-                if command_id == "new":
-                    forward_coalescer.cancel(forward_key)
-                    if state.topic_store is not None and topic_key is not None:
-                        tg.start_soon(
-                            partial(
-                                handle_new_command,
-                                cfg,
-                                msg,
-                                state.topic_store,
-                                resolved_scope=state.resolved_topics_scope,
-                                scope_chat_ids=state.topics_chat_ids,
-                            )
-                        )
-                        return
-                    if state.chat_session_store is not None:
-                        tg.start_soon(
-                            handle_chat_new_command,
-                            cfg,
-                            msg,
-                            state.chat_session_store,
-                            chat_session_key,
-                        )
-                        return
-                    if state.topic_store is not None:
-                        tg.start_soon(
-                            partial(
-                                handle_new_command,
-                                cfg,
-                                msg,
-                                state.topic_store,
-                                resolved_scope=state.resolved_topics_scope,
-                                scope_chat_ids=state.topics_chat_ids,
-                            )
-                        )
-                        return
                 if command_id == "continue":
                     forward_coalescer.cancel(forward_key)
                     prompt_text = args_text.strip() if args_text else ""
@@ -1948,6 +1953,9 @@ async def run_main_loop(
                         scope_chat_ids=state.topics_chat_ids,
                         reply=reply,
                         task_group=tg,
+                        running_tasks=state.running_tasks,
+                        chat_session_store=state.chat_session_store,
+                        chat_session_key=chat_session_key,
                     ),
                     command_id=command_id,
                 ):
@@ -2113,7 +2121,7 @@ async def run_main_loop(
 
                     pending_ask = get_pending_ask_request(channel_id=msg.chat_id)
                     if pending_ask is not None:
-                        ask_req_id, ask_question = pending_ask
+                        ask_req_id, _ask_question = pending_ask
                         logger.info(
                             "ask_user_question.answering",
                             request_id=ask_req_id,
@@ -2283,7 +2291,7 @@ async def run_main_loop(
             # running_tasks, then wait for them to complete before
             # triggering shutdown so _drain_and_exit() can exit.
             for _ in range(10):
-                await anyio.sleep(0)
+                await anyio.lowlevel.checkpoint()
             while state.running_tasks:
                 await sleep(0.1)
             request_shutdown()

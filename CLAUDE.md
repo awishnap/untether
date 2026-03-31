@@ -10,7 +10,7 @@ Untether adds interactive permission control, plan mode support, and several UX 
 ## Features (vs upstream takopi)
 
 - **Interactive permission control** — bidirectional Telegram buttons for tool approval, plan mode, and clarifying questions
-- **Pause & Outline Plan** — third button on plan approval; after Claude writes the outline, Approve/Deny buttons appear automatically (hold-open keeps session alive while user reads)
+- **Pause & Outline Plan** — third button on plan approval; after Claude writes the outline, Approve/Deny/Let's discuss buttons appear automatically (hold-open keeps session alive while user reads)
 - **Agent context preamble** — configurable prompt preamble tells agents they're on Telegram and requests structured end-of-task summaries; `[preamble]` config section
 - **`/planmode`** — toggle permission mode per chat (on/off/auto)
 - **Ask mode** — interactive AskUserQuestion with option buttons, sequential multi-question flows, and `/config` toggle; Claude-only
@@ -25,14 +25,17 @@ Untether adds interactive permission control, plan mode support, and several UX 
 - **Subscription usage footer** — configurable `[footer]` to show 5h/weekly subscription usage instead of/alongside API costs
 - **Graceful restart** — `/restart` command drains active runs before restarting; SIGTERM also triggers graceful drain
 - **Compact startup message** — version number, conditional diagnostics (only shows mode/topics/triggers/engines when they carry signal), project count instead of full list
+- **Workflow mode indicator** — startup message shows `mode: assistant`, `mode: workspace`, or `mode: handoff`; derived from `session_mode` + `topics.enabled`
 - **Model/mode footer** — final messages show model name + permission mode (e.g. `🏷 sonnet · plan`) from `StartedEvent.meta`; all engines populate model info
 - **`/verbose`** — toggle verbose progress mode per chat; shows tool details (file paths, commands, patterns) in progress messages
 - **`/config`** — inline settings menu with navigable sub-pages; toggle plan mode, ask mode, verbose, engine, trigger via buttons
 - **`[progress]` config** — global verbosity and max_actions settings in `untether.toml`
 - **Pi context compaction** — `AutoCompactionStart`/`AutoCompactionEnd` events rendered as progress actions
-- **Stall diagnostics & liveness watchdog** — `/proc` process diagnostics (CPU, RSS, TCP, FDs), progressive stall warnings with Telegram notifications, liveness watchdog for alive-but-silent subprocesses, stall auto-cancel (dead process, no-PID zombie, absolute cap) with CPU-active suppression, `session.summary` structured log; `[watchdog]` config section
+- **Stall diagnostics & liveness watchdog** — `/proc` process diagnostics (CPU, RSS, TCP, FDs), progressive stall warnings with Telegram notifications, liveness watchdog for alive-but-silent subprocesses, stall auto-cancel (dead process, no-PID zombie, absolute cap) with CPU-active suppression (sleeping-process aware — shows tool name when main process waiting on child), tool-active repeat suppression (first warning fires, repeats suppressed while child CPU-active), MCP tool-aware threshold (15 min for network-bound MCP calls vs 10 min for local tools) with contextual "MCP tool running: {server}" messaging, `session.summary` structured log; `[watchdog]` config section with configurable `tool_timeout` and `mcp_tool_timeout`
+- **Auto-continue** — detects Claude Code sessions that exit after receiving tool results without processing them (upstream bugs #34142, #30333) and auto-resumes; suppressed on signal deaths (rc=143/SIGTERM, rc=137/SIGKILL) to prevent death spirals under memory pressure; configurable via `[auto_continue]` with `enabled` (default true) and `max_retries` (default 1)
 - **File upload deduplication** — auto-appends `_1`, `_2`, … when target file exists, instead of requiring `--force`; media groups without captions auto-save to `incoming/`
 - **Agent-initiated file delivery (outbox)** — agents write files to `.untether-outbox/` during a run; Untether sends them as Telegram documents on completion with `📎` captions; deny-glob security, size limits, file count cap, auto-cleanup; `[transports.telegram.files]` config
+- **Progress persistence** — active progress messages persisted to `active_progress.json`; on restart, orphan messages edited to "⚠️ interrupted by restart" with keyboard removed
 - **Resume line formatting** — visual separation with blank line and ↩️ prefix in final message footer
 - **`/continue`** — cross-environment resume; pick up the most recent CLI session from Telegram using each engine's native continue flag (`--continue`, `resume --last`, `--resume latest`); supported for Claude, Codex, OpenCode, Pi, Gemini (not AMP)
 
@@ -58,7 +61,7 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencod
 | `runners/claude.py` | Claude Code runner, interactive features |
 | `runners/gemini.py` | Gemini CLI runner |
 | `runners/amp.py` | AMP CLI runner (Sourcegraph) |
-| `runner_bridge.py` | Connects runners to Telegram presenter, injects agent preamble |
+| `runner_bridge.py` | Connects runners to Telegram presenter, injects agent preamble, auto-continue with signal death suppression |
 | `cost_tracker.py` | Per-run/daily cost tracking and budget alerts |
 | `commands/claude_control.py` | Approve/Deny/Discuss callback handler |
 | `commands/dispatch.py` | Callback dispatch and command routing |
@@ -71,6 +74,7 @@ Telegram <-> TelegramPresenter <-> RunnerBridge <-> Runner (claude/codex/opencod
 | `commands/verbose.py` | `/verbose` toggle command |
 | `commands/config.py` | `/config` inline settings menu |
 | `commands/ask_question.py` | AskUserQuestion option button handler |
+| `commands/topics.py` | `/new`, `/ctx`, `/topic` commands; `_cancel_chat_tasks()` helper |
 | `utils/proc_diag.py` | `/proc` process diagnostics for stall analysis (CPU, RSS, TCP, FDs, children) |
 | `shutdown.py` | Graceful shutdown state and drain logic |
 | `telegram/bridge.py` | Telegram message rendering |
@@ -106,6 +110,7 @@ Detailed protocol specs and event cheatsheets for each integration:
 | AMP stream-json | `docs/reference/runners/amp/stream-json-cheatsheet.md` | JSONL event shapes (`system`, `assistant`, `user`, `result`) |
 | AMP event mapping | `docs/reference/runners/amp/untether-events.md` | AMP JSONL → Untether event translation rules |
 | Telegram transport | `docs/reference/transports/telegram.md` | Bot API client, outbox/rate-limiting, voice transcription, forum topics |
+| Workflow modes | `docs/reference/modes.md` | Assistant, workspace, handoff — settings, commands, mode-agnostic features |
 
 ## Skills (project-scoped)
 
@@ -126,7 +131,7 @@ Project hooks in `.claude/hooks.json` fire automatically:
 
 | Hook | Trigger | What it does |
 |------|---------|-------------|
-| release-guard | Bash: `git push`, `git tag`, `gh pr merge`, `gh release` | Blocks pushes to master/main, tag creation, PR merging, releases; allows feature branch pushes |
+| release-guard | Bash: `git push`, `git tag`, `gh pr merge`, `gh release` | Blocks pushes to master/main, tag creation, PR merging, releases; allows feature and dev branch pushes |
 | release-guard-protect | Edit/Write to guard scripts or `hooks.json` | Prevents modification of release guard infrastructure |
 | release-guard-mcp | GitHub MCP write tools | Blocks `merge_pull_request` and writes to master/main; allows feature branches |
 | dev-workflow-guard | `systemctl` with `untether` | Blocks staging restarts during dev; guides to `untether-dev`; allows `staging.sh`/`pipx upgrade` path |
@@ -150,34 +155,35 @@ Rules in `.claude/rules/` auto-load when editing matching files:
 
 ## Tests
 
-1578 unit tests, 80% coverage threshold. Integration testing against `@untether_dev_bot` is **mandatory before every release** — see `docs/reference/integration-testing.md` for the full playbook with per-release-type tier requirements (patch/minor/major). All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash.
+1818 unit tests, 80% coverage threshold. Integration testing against `@untether_dev_bot` is **mandatory before every release** — see `docs/reference/integration-testing.md` for the full playbook with per-release-type tier requirements (patch/minor/major). All integration test tiers are fully automated by Claude Code via Telegram MCP tools and Bash.
 
 Key test files:
 
-- `test_claude_control.py` — 82 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
-- `test_callback_dispatch.py` — 25 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
-- `test_exec_bridge.py` — 91 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel with CPU-active suppression, approval-aware stall threshold, session summary, PID/stream threading
-- `test_ask_user_question.py` — 25 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
+- `test_claude_control.py` — 94 tests: control requests, response routing, registry lifecycle, auto-approve/auto-deny, tool auto-approve, custom deny messages, discuss action, early toast, progressive cooldown, auto permission mode
+- `test_callback_dispatch.py` — 26 tests: callback parsing, dispatch toast/ephemeral behaviour, early answering
+- `test_exec_bridge.py` — 140 tests: ephemeral notification cleanup, approval push notifications, progressive stall warnings, stall diagnostics, stall auto-cancel with CPU-active suppression (sleeping-process aware), tool-active repeat suppression, approval-aware stall threshold, MCP tool stall threshold, frozen ring buffer hung escalation, session summary, PID/stream threading, auto-continue detection, signal death suppression
+- `test_ask_user_question.py` — 29 tests: AskUserQuestion control request handling, question extraction, pending request registry, answer routing, option button rendering, multi-question flows, structured answer responses, ask mode toggle auto-deny
 - `test_diff_preview.py` — 14 tests: Edit diff display, Write content preview, Bash command display, line/char truncation
 - `test_cost_tracker.py` — 12 tests: cost accumulation, per-run/daily budget thresholds, warning levels, daily reset, auto-cancel flag
-- `test_export_command.py` — 15 tests: session event recording, markdown/JSON export formatting, usage integration, session trimming
+- `test_export_command.py` — 16 tests: session event recording, markdown/JSON export formatting, usage integration, session trimming
 - `test_browse_command.py` — 39 tests: path registry, directory listing, file preview, inline keyboard buttons, project-aware root resolution, security (path traversal)
-- `test_meta_line.py` — 43 tests: model name shortening, meta line formatting, ProgressTracker meta storage/snapshot, footer ordering (context/meta/resume)
+- `test_meta_line.py` — 54 tests: model name shortening, meta line formatting, ProgressTracker meta storage/snapshot, footer ordering (context/meta/resume)
 - `test_runner_utils.py` — 34 tests: error formatting helpers, drain_stderr capture, enriched error messages, stderr sanitisation
 - `test_shutdown.py` — 4 tests: shutdown state transitions, idempotency, reset
-- `test_preamble.py` — 5 tests: default preamble injection, disabled preamble, custom text override, empty text disables, settings defaults
+- `test_preamble.py` — 6 tests: default preamble injection, disabled preamble, custom text override, empty text disables, settings defaults
 - `test_restart_command.py` — 3 tests: command triggers shutdown, idempotent response, command id
-- `test_cooldown_bypass.py` — 19 tests: outline bypass, rapid retry auto-deny, no-text auto-deny, cooldown escalation, hold-open outline flow
+- `test_cooldown_bypass.py` — 21 tests: outline bypass, rapid retry auto-deny, no-text auto-deny, cooldown escalation, hold-open outline flow
 - `test_verbose_progress.py` — 21 tests: format_verbose_detail() for each tool type, MarkdownFormatter verbose mode, compact regression
 - `test_verbose_command.py` — 7 tests: /verbose toggle on/off/clear, backend id
-- `test_config_command.py` — 195 tests: home page, plan mode/ask mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility, default resolution
+- `test_config_command.py` — 218 tests: home page, plan mode/ask mode/verbose/engine/trigger/model/reasoning sub-pages, toggle actions, callback vs command routing, button layout, engine-aware visibility, default resolution
 - `test_pi_compaction.py` — 6 tests: compaction start/end, aborted, no tokens, sequence
 - `test_proc_diag.py` — 24 tests: format_diag, is_cpu_active, collect_proc_diag (Linux /proc reads), ProcessDiag defaults
 - `test_exec_runner.py` — 28 tests: event tracking (event_count, recent_events ring buffer, PID in StartedEvent meta), JsonlStreamState defaults
-- `test_build_args.py` — 33 tests: CLI argument construction for all 6 engines, model/reasoning/permission flags
+- `test_build_args.py` — 40 tests: CLI argument construction for all 6 engines, model/reasoning/permission flags
 - `test_telegram_files.py` — 17 tests: file helpers, deduplication, deny globs, default upload paths
 - `test_telegram_file_transfer_helpers.py` — 48 tests: `/file put` and `/file get` command handling, media groups, force overwrite
 - `test_loop_coverage.py` — 29 tests: update loop edge cases, message routing, callback dispatch, shutdown integration
+- `test_telegram_topics_command.py` — 16 tests: `/new` cancellation (cancel helper, chat/topic modes, running task cleanup), `/ctx` binding, `/topic` command
 
 ## Development
 
@@ -193,14 +199,16 @@ Two instances run on lba-1 — staging (PyPI/TestPyPI) and dev (local editable s
 ### 3-phase release workflow (MANDATORY)
 
 1. **Dev** — fix code, run unit tests, test via `@untether_dev_bot` (6 engine chats), run integration tests
-2. **Staging** — bump to `X.Y.ZrcN`, push master → CI publishes to TestPyPI, install on `@hetz_lba1_bot` via `scripts/staging.sh`, Nathan dogfoods for 1+ week
-3. **Release** — bump to `X.Y.Z`, write changelog, tag `vX.Y.Z`, push — `release.yml` publishes to PyPI (requires Nathan's approval in GitHub Actions UI)
+2. **Staging** — bump to `X.Y.ZrcN`, merge feature branches to `dev` → CI publishes to TestPyPI, install on `@hetz_lba1_bot` via `scripts/staging.sh`, Nathan dogfoods for 1+ week
+3. **Release** — bump to `X.Y.Z`, write changelog, PR from `dev` → `master`, tag `vX.Y.Z` on master — `release.yml` publishes to PyPI (requires Nathan's approval in GitHub Actions UI)
+
+**Branch model:** `feature/*` → PR → `dev` (TestPyPI) → PR → `master` (PyPI). Master always matches the latest PyPI release.
 
 **NEVER skip staging for minor/major releases. NEVER go directly from dev to PyPI tagging.**
 
 **Claude Code's role in each phase:**
-- **Dev**: edit code, run tests, push feature branches, create PRs, run integration tests via Telegram MCP
-- **Staging/Release**: prepare version bumps, changelog entries, and commit locally — Nathan pushes to master, creates tags, and approves PyPI deploys
+- **Dev**: edit code, run tests, push feature branches, create PRs to `dev`, run integration tests via Telegram MCP
+- **Staging/Release**: prepare version bumps, changelog entries, and commit on feature branches — Nathan merges PRs to `dev` and `master`, creates tags, and approves PyPI deploys
 
 Claude Code MUST NOT push to master, merge PRs, create version tags, or trigger releases. These are enforced by hooks and GitHub rulesets (see "Release guard" below).
 
@@ -224,14 +232,17 @@ Multi-layer protection prevents accidental merges to master and PyPI publishes. 
 - **CODEOWNERS** — `* @littlebearapps/core`
 
 **Local hooks (defense-in-depth):**
-- `release-guard.sh` — blocks `git push` to master/main, `git tag v*`, `gh release create`, `gh pr merge`; feature branch pushes allowed
+- `release-guard.sh` — blocks `git push` to master/main, `git tag v*`, `gh release create`, `gh pr merge`; feature and dev branch pushes allowed
 - `release-guard-protect.sh` — blocks Edit/Write to guard scripts and `.claude/hooks.json`
-- `release-guard-mcp.sh` — blocks GitHub MCP `merge_pull_request` and writes to master/main; feature branches allowed
+- `release-guard-mcp.sh` — blocks GitHub MCP `merge_pull_request` and writes to master/main; feature and dev branches allowed
 
 **Claude Code MUST:**
 - Push to feature branches: `git push -u origin feature/<name>`
-- Create PRs for Nathan to review: `gh pr create --title "..." --body "..."`
-- Let Nathan merge PRs, create tags, and approve PyPI deploys manually
+- Create PRs to dev: `gh pr create --base dev --title "..." --body "..."`
+- Merge PRs to dev (allowed): `gh pr merge <number> --squash` (TestPyPI/staging only)
+- Let Nathan merge PRs to master, create tags, and approve PyPI deploys manually
+
+Claude Code MUST NOT merge PRs targeting master — only dev merges are allowed.
 
 **Self-guarding:** the hook scripts, `.claude/hooks.json`, and GitHub rulesets cannot be modified by Claude Code. Only Nathan can change these by editing files manually outside Claude Code.
 
@@ -254,18 +265,18 @@ uv run ruff check src/
 
 ## CI Pipeline
 
-GitHub Actions CI runs on push to master and on PRs:
+GitHub Actions CI runs on push to master/dev and on PRs:
 
 | Job | What it checks |
 |-----|---------------|
 | format | `ruff format --check --diff` |
 | ruff | `ruff check` with GitHub annotations |
-| ty | Type checking (Astral's ty) |
+| ty | Type checking (Astral's ty, informational — `continue-on-error`) |
 | pytest | Tests on Python 3.12, 3.13, 3.14 with 80% coverage threshold |
 | build | `uv build` + `twine check` + `check-wheel-contents` validation |
 | lockfile | `uv lock --check` ensures lockfile is in sync |
 | install-test | Clean wheel install + smoke-test imports (catches undeclared deps) |
-| testpypi-publish | Publishes to TestPyPI on master push (OIDC, `skip-existing: true`) |
+| testpypi-publish | Publishes to TestPyPI on dev push (OIDC, `skip-existing: true`) |
 | release-validation | PR-only: validates changelog format, issue links, date when version changes |
 | pip-audit | Dependency vulnerability scanning (PyPA advisory DB) |
 | bandit | Python SAST (security static analysis) |
@@ -314,7 +325,7 @@ Before tagging a release:
 
 ## Documentation screenshots
 
-44 screenshots in `docs/assets/screenshots/` with a tracking checklist in `CAPTURES.md`. README uses a composite hero collage (`hero-collage.jpg`) built with ImageMagick for mobile responsiveness. Doc files use HTML `<img>` tags with `width="360"` and `loading="lazy"` (works in both GitHub and MkDocs). 11 screenshots are still missing and commented out with `<!-- TODO: capture screenshot -->` markers.
+48 screenshots in `docs/assets/screenshots/` with a tracking checklist in `CAPTURES.md`. README uses a composite hero collage (`hero-collage.jpg`) built with ImageMagick for mobile responsiveness. Doc files use HTML `<img>` tags with `width="360"` and `loading="lazy"` (works in both GitHub and MkDocs). 14 screenshots are still missing and commented out with `<!-- TODO: capture screenshot -->` markers.
 
 ## Conventions
 

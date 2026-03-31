@@ -87,6 +87,67 @@ Run `untether doctor` to see which engines are detected.
 3. Check `debug.log` — the engine may have errored silently
 4. Verify the engine works standalone: run `codex "hello"` (or equivalent) directly in a terminal
 
+## Engine hangs in headless mode
+
+**Symptoms:** The engine starts but produces no output, eventually triggering stall warnings. Common with Codex and OpenCode when the engine needs user input (approval or question) but has no terminal to display it.
+
+### Codex: approval hang
+
+Codex may block waiting for terminal approval in headless mode if no `--ask-for-approval` flag is passed. **Fix:** upgrade to Untether v0.35.0+ which always passes `--ask-for-approval never` (or `untrusted` in safe permission mode). Older versions may not pass this flag, causing Codex to use its default terminal-based approval flow.
+
+### OpenCode: unsupported event warning
+
+If OpenCode emits a JSONL event type that Untether doesn't recognise (e.g. a `question` or `permission` event from a newer OpenCode version), Untether v0.35.0+ shows a visible warning in Telegram: "opencode emitted unsupported event: {type}". In older versions, these events were silently dropped, leaving the user with no feedback until the stall watchdog fired.
+
+If you see this warning, check for an Untether update that adds support for the new event type. OpenCode's `run` command auto-denies questions via permission rules, so this should be rare — it most likely indicates an OpenCode protocol change.
+
+## Stall warnings
+
+**Symptoms:** Telegram shows "⏳ No progress for X min — session may be stuck" or "⏳ MCP tool running: server-name (X min)".
+
+The stall watchdog monitors engine subprocesses for periods of inactivity (no JSONL events on stdout). Thresholds vary by context:
+
+| Context | Threshold | Example |
+|---------|-----------|---------|
+| Normal (thinking/generation) | 5 min | Model is generating a response |
+| Local tool running (Bash, Read, etc.) | 10 min | Long test suite or build |
+| MCP tool running | 15 min | External API call (Cloudflare, GitHub, web search) |
+| Pending user approval | 30 min | Waiting for Approve/Deny click |
+
+**If the warning names an MCP tool** (e.g. "MCP tool running: cloudflare-observability"), the process is likely waiting on a slow external API. This is usually not a real stall — wait for it to complete or `/cancel` if it's taking too long.
+
+**If the warning says "MCP tool may be hung"**, the MCP tool has been running with no new events for an extended period (3+ stall checks with a frozen event buffer). This usually means the MCP server is stuck in an internal retry loop. Use `/cancel` and retry with a more targeted prompt.
+
+**If the warning says "CPU active, no new events"**, the process is using CPU but hasn't produced any new JSONL events for 3+ stall checks. This can happen when Claude Code is stuck in a long API call, extended thinking, or an internal retry loop. Use `/cancel` if the silence persists.
+
+**If the warning says "Bash command still running (X min)"**, Claude Code is waiting for a long-running tool subprocess (benchmark, build, test suite). This warning fires once when the tool exceeds the threshold (10 min by default). While the child process is actively consuming CPU, repeat warnings are suppressed — you won't see the same message every 3 minutes. If the child process stops consuming CPU, warnings resume with "tool may be stuck".
+
+**If the warning says "X tool may be stuck (N min, no CPU activity)"**, the tool subprocess has stopped consuming CPU, suggesting it may be genuinely stuck (e.g. a hung `curl`, a network timeout, a deadlock). Use `/cancel` and resume, asking Claude to skip the hung command.
+
+**If the warning says "session may be stuck"**, the process may genuinely be stalled. Check:
+
+1. Look at the diagnostics in the message — CPU active, TCP connections, RSS
+2. If CPU is active and TCP connections exist, the process is likely still working
+3. If CPU is idle and no TCP connections, the process may be truly stuck — use `/cancel`
+
+**Tuning:** All thresholds are configurable via `[watchdog]` in `untether.toml`. Use `tool_timeout` to increase the initial threshold for local tools (default 10 min), and `mcp_tool_timeout` for MCP tools (default 15 min). See the [config reference](../reference/config.md#watchdog).
+
+## Claude Code exits without finishing (auto-continue)
+
+**Symptoms:** Claude Code exits after receiving tool results without processing them. You see "⚠️ Auto-continuing" in the chat, or the session ends prematurely with no final answer.
+
+This is an upstream Claude Code bug ([#34142](https://github.com/anthropics/claude-code/issues/34142), [#30333](https://github.com/anthropics/claude-code/issues/30333)). Untether detects it automatically and resumes the session.
+
+**How it works:** Normal sessions end with `last_event_type=result`. When Claude Code exits with `last_event_type=user` (tool results sent but never processed), Untether sends a "⚠️ Auto-continuing" notification and resumes the session.
+
+**If auto-continue keeps firing:**
+
+1. Check if the upstream bug is fixed in a newer Claude Code version: `npm i -g @anthropic-ai/claude-code@latest`
+2. Disable auto-continue if it causes issues: set `enabled = false` in `[auto_continue]`
+3. Increase max retries if a single retry isn't enough: set `max_retries = 2` (max 5)
+
+**Auto-continue is suppressed for signal deaths** (rc=143/SIGTERM, rc=137/SIGKILL) to prevent death spirals under memory pressure. See the [config reference](../reference/config.md#auto_continue).
+
 ## Messages too long or truncated
 
 **Symptoms:** The bot's response is cut off or split across multiple messages.
@@ -305,74 +366,52 @@ all checks passed
 
 Look for `handle.worker_failed`, `handle.runner_failed`, or `config.read.toml_error` entries.
 
+### Key log events
+
+| Event | Level | Meaning |
+|-------|-------|---------|
+| `handle.worker_failed` | ERROR | Engine run crashed |
+| `handle.runner_failed` | ERROR | Runner subprocess failed |
+| `config.read.toml_error` | ERROR | Config file couldn't be parsed |
+| `footer_settings.load_failed` | WARNING | Footer config fell back to defaults |
+| `watchdog_settings.load_failed` | WARNING | Watchdog config fell back to defaults |
+| `auto_continue_settings.load_failed` | WARNING | Auto-continue config fell back to defaults |
+| `preamble_settings.load_failed` | WARNING | Preamble config fell back to defaults |
+| `outline_cleanup.delete_failed` | WARNING | Stale plan outline message couldn't be deleted |
+| `handle.engine_resolved` | INFO | Engine and CWD successfully resolved for a run |
+| `file_transfer.saved` | INFO | File uploaded and written to disk |
+| `file_transfer.denied` | WARNING | File transfer blocked (permissions, deny glob) |
+| `message.dropped` | DEBUG | Message from unrecognised chat silently dropped |
+| `cost_budget.exceeded` | ERROR | Run or daily cost exceeded budget |
+
+All logs include `session_id` once a session starts, enabling per-session filtering with `grep` or `jq`.
+
+Telegram bot tokens, OpenAI API keys (`sk-...`), and GitHub tokens (`ghp_`, `ghs_`, `github_pat_`) are automatically redacted in all log output.
+
 ## Error hints
 
-When an engine fails, Untether scans the error message and shows an actionable recovery hint below the error. These hints cover the most common failure modes across all engines and providers.
+When an engine fails, Untether scans the error message and shows an actionable recovery hint above the raw error. The raw error is wrapped in a code block for visual separation. Hints are case-insensitive and pattern-matched — the first match wins. Your session is automatically saved in most cases, so you can resume after resolving the issue.
 
-### Authentication errors
+Untether recognises **67 error patterns** across 14 categories:
 
-| Error | Hint |
-|-------|------|
-| Access token could not be refreshed | Run `codex login --device-auth` to re-authenticate |
-| Log out and sign in again | Run `codex login` to re-authenticate |
-| `anthropic_api_key` | Check that ANTHROPIC_API_KEY is set in your environment |
-| `openai_api_key` | Check that OPENAI_API_KEY is set in your environment |
-| `google_api_key` | Check that your Google API key is set in your environment |
+| Category | Examples | Engines |
+|----------|----------|---------|
+| Authentication | API key missing/invalid, token refresh, login required | All |
+| Subscription & billing | Usage limits, quota exceeded, billing hard limit | Claude, Codex, OpenCode, Gemini |
+| API overload & server | 500/502/503/504, overloaded | All |
+| Rate limits | Rate limited, too many requests | All |
+| Model errors | Model not found, invalid model | All |
+| Context length | Context too long, max tokens exceeded | Claude, Codex, OpenCode |
+| Content safety | Content filter, safety block, prompt blocked | Claude, Gemini |
+| Invalid request | Malformed API request | Claude, Codex |
+| Network & SSL | DNS, timeout, connection refused, certificate errors | All |
+| CLI & filesystem | Command not found, disk full, permission denied | All |
+| Signals | SIGTERM, SIGKILL, SIGABRT | All |
+| Process & session | No result event, no session ID, execution errors | All |
+| Engine-specific | AMP credits/login, Gemini result status | AMP, Gemini |
+| Account & proxy | Account suspended, proxy auth, request timeout | All |
 
-### Subscription and billing limits
-
-| Error | Hint |
-|-------|------|
-| Out of extra usage / hit your limit | Subscription usage limit reached — wait for the reset window, then resume |
-| `insufficient_quota` / exceeded your current quota | OpenAI billing quota exceeded — add credits at platform.openai.com |
-| `billing_hard_limit_reached` | OpenAI billing hard limit — increase your spend limit at platform.openai.com |
-| `resource_exhausted` | Google API quota exhausted — check quota at console.cloud.google.com |
-
-### API overload and server errors
-
-| Error | Hint |
-|-------|------|
-| `overloaded_error` (529) | Anthropic API overloaded — temporary, session saved, try again in a few minutes |
-| Server is overloaded | API server overloaded — temporary, try again in a few minutes |
-| `internal_server_error` (500) | Internal server error — usually temporary, try again shortly |
-| Bad gateway (502) | Bad gateway error — usually temporary, try again shortly |
-| Service unavailable (503) | API temporarily unavailable — try again in a few minutes |
-| Gateway timeout (504) | Gateway timed out — usually temporary, try again shortly |
-
-### Rate limits
-
-| Error | Hint |
-|-------|------|
-| Rate limit / too many requests | Rate limited — the engine will retry automatically |
-
-### Network errors
-
-| Error | Hint |
-|-------|------|
-| Connection refused | Check that the target service is running |
-| Connect timeout | Connection timed out — check your network, then try again |
-| Read timeout | Connection timed out — usually transient, try again |
-| Name or service not known | DNS resolution failed — check your network connection |
-| Network is unreachable | Network unreachable — check your internet connection |
-
-### Process signals
-
-| Error | Hint |
-|-------|------|
-| SIGTERM | Untether was restarted — session saved, resume by sending a new message |
-| SIGKILL | Process forcefully terminated (timeout or OOM) — session saved, try resuming |
-| SIGABRT | Process aborted unexpectedly — try starting a fresh session with `/new` |
-
-### Session and process errors
-
-| Error | Hint |
-|-------|------|
-| Session not found | Try a fresh session without --session flag |
-| Error during execution | Session failed to load (possibly corrupted) — send `/new` to start fresh |
-| Finished without a result event | Engine exited before producing a final answer (crash or timeout) — session saved, try resuming |
-| Finished but no session_id | Engine crashed during startup — check that the engine CLI is installed and working |
-
-All hints are case-insensitive and pattern-matched against the full error output. The first matching hint wins. Your session is automatically saved in most cases, so you can resume after resolving the issue.
+For the full list of patterns and hints, see the [Error Reference](../reference/errors.md).
 
 ## Related
 

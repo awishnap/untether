@@ -1659,8 +1659,8 @@ class TestAskQuestions:
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
         assert "Ask mode" in msg.text
-        # Toggle row: default off -> shows toggle-on button and clear
-        assert "config:aq:on" in _buttons_data(msg)
+        # Toggle row: default on -> shows toggle-off button and clear
+        assert "config:aq:off" in _buttons_data(msg)
         assert "config:aq:clr" in _buttons_data(msg)
 
     @pytest.mark.anyio
@@ -2063,7 +2063,7 @@ class TestDiffPreview:
 
     @pytest.mark.anyio
     async def test_diff_preview_default_label_on_page(self, tmp_path):
-        """No override → page shows 'default (off)'."""
+        """No override → page shows resolved 'off'."""
         state_path = tmp_path / "prefs.json"
         cmd = ConfigCommand()
         ctx = _make_ctx(
@@ -2074,7 +2074,7 @@ class TestDiffPreview:
         )
         await cmd.handle(ctx)
         msg = _last_edit_msg(ctx)
-        assert "default (off)" in msg.text
+        assert "Current: <b>off</b>" in msg.text
 
 
 # ---------------------------------------------------------------------------

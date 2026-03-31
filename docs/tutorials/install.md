@@ -30,7 +30,7 @@ Verify it's installed:
 untether --version
 ```
 
-You should see the installed version number (e.g. `0.34.5`).
+You should see the installed version number (e.g. `0.35.0`).
 
 ## 3. Install agent CLIs
 
@@ -285,7 +285,19 @@ untether runs these engines on your computer. switch anytime with /agent.
 
 Pick whichever you prefer. You can switch engines per-message with `/codex`, `/claude`, etc., or change the default anytime via `/config` in Telegram.
 
-## 10. Save your config
+## 10. Choose your workflow mode
+
+Untether supports three workflow modes that control how conversations continue:
+
+| Mode | Best for | How it works |
+|------|----------|-------------|
+| **Assistant** | Solo dev, private chat | Messages auto-resume your last session. Use `/new` to start fresh. *(recommended)* |
+| **Workspace** | Teams, multiple projects | Forum topics, each bound to a project/branch. Independent sessions per topic. |
+| **Handoff** | Terminal-first workflow | Every message is a new run. Resume lines shown for copying to terminal. |
+
+The onboarding wizard configures this automatically based on your setup (private chat = assistant, forum group = workspace). You can change modes later by editing three settings in your config file — see [Choose a workflow mode](../how-to/choose-a-mode.md) for details.
+
+## 11. Save your config
 
 ```
 step 5: save config
@@ -302,10 +314,15 @@ Press **y** or **Enter** to save. You'll see:
 Untether is now running and listening for messages!
 
 !!! untether "Untether"
-    🐕 untether v0.34.0 is ready
+    🐕 untether is ready (v0.35.0)
 
-    engine: `codex` · projects: `0`<br>
-    working in: /Users/you/dev/your-project
+    *default engine:* `codex`<br>
+    *installed engines:* codex<br>
+    mode: assistant
+
+    Send a message to start, or /config for settings.
+
+    📖 Click here for help | 🐛 Click here to report a bug
 
 <img src="../assets/screenshots/startup-message.jpg" alt="Telegram startup message showing version and engine info" width="360" loading="lazy" />
 
