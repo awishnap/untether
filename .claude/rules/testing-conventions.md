@@ -113,3 +113,5 @@ All integration test tiers are fully automatable by Claude Code.
 | `test_loop_coverage.py` | Update loop edge cases, message routing, shutdown |
 | `test_exec_runner.py` | Event tracking, ring buffer, PID in StartedEvent meta |
 | `test_runner_utils.py` | Error formatting, drain_stderr, stderr sanitisation |
+| `test_trigger_cron.py` | Cron expression matching, timezone conversion, step validation |
+| `test_trigger_settings.py` | CronConfig/WebhookConfig/TriggersSettings validation, timezone |
