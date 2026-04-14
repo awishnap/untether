@@ -84,6 +84,7 @@ def install(
     _RUN_JOB = run_job
     _TRANSPORT = transport
     _DEFAULT_CHAT_ID = int(default_chat_id)
+    logger.info("at.installed", default_chat_id=default_chat_id)
 
 
 def uninstall() -> None:
@@ -113,6 +114,13 @@ def schedule_delayed_run(
     installed, the delay is out of range, or the per-chat cap is reached.
     """
     if _TASK_GROUP is None or _RUN_JOB is None or _TRANSPORT is None:
+        logger.error(
+            "at.schedule.not_installed",
+            task_group=_TASK_GROUP is not None,
+            run_job=_RUN_JOB is not None,
+            transport=_TRANSPORT is not None,
+            module_id=id(__import__("untether.telegram.at_scheduler", fromlist=[""])),
+        )
         raise AtSchedulerError("/at scheduler not installed")
     if delay_s < MIN_DELAY_SECONDS or delay_s > MAX_DELAY_SECONDS:
         raise AtSchedulerError(
@@ -156,6 +164,13 @@ async def _run_delayed(token: str) -> None:
         entry.fired = True
         # Pop before firing so /cancel can no longer see it as pending.
         _PENDING.pop(token, None)
+
+    # CancelScope.__exit__ swallows the Cancelled exception when the scope
+    # itself was the source of the cancellation. Check cancelled_caught to
+    # avoid firing after /cancel.
+    if entry.cancel_scope.cancelled_caught:
+        _PENDING.pop(token, None)
+        return
 
     assert _RUN_JOB is not None and _TRANSPORT is not None
     # Send a notification so run_job has a message_id to reply to,
