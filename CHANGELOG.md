@@ -2,6 +2,10 @@
 
 ## v0.35.2 (unreleased)
 
+### changes
+
+- **feat:** `[[triggers.crons]]` now accepts an optional `permission_mode` field (`default` | `plan` | `auto` | `acceptEdits` | `bypassPermissions`) that overrides the chat / engine default for that cron's run only. Crons firing into plan-mode chats can now declare themselves autonomous via `permission_mode = "auto"` without flipping the whole chat to auto. Precedence: cron `permission_mode` > per-chat `/planmode` > engine config default. Claude-only for this release; Codex + Gemini completion is tracked in [#331](https://github.com/littlebearapps/untether/issues/331), and the broader all-engines + webhooks extension in [#332](https://github.com/littlebearapps/untether/issues/332) (v0.35.5). New `VALID_PERMISSION_MODES_BY_ENGINE` dict in `runners/run_options.py` lets the `CronConfig` validator reject typos for engines with known value sets while staying forward-compatible for engines whose permission wiring is pending. A new `trigger.cron.permission_mode_override` structlog INFO entry fires when the override actually changes the resolved value, for staging observability. [#330](https://github.com/littlebearapps/untether/issues/330)
+
 ### fixes
 
 - **security:** CI matrix values (`matrix.command`, `matrix.sync_args`) now pass through `env:` instead of direct `${{ }}` interpolation in `run:` blocks, eliminating a theoretical shell-injection vector should matrix values ever become dynamic (e.g. from PR labels) [#195](https://github.com/littlebearapps/untether/issues/195)
