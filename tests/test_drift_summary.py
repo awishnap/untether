@@ -62,6 +62,16 @@ def test_summarize_top_triggers():
     assert s["top_triggers"][0][1] == 2
 
 
+def test_summarize_top_triggers_limit():
+    # Verify that summarize returns at most 5 top triggers (default limit)
+    events = [
+        {"hook": "context-drift-check", "severity": "warn", "message": f"trigger-{i}"}
+        for i in range(10)
+    ]
+    s = drift_summary.summarize(events)
+    assert len(s["top_triggers"]) <= 5
+
+
 def test_summarize_empty():
     s = drift_summary.summarize([])
     assert s["total"] == 0
