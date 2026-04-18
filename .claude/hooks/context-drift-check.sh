@@ -1,106 +1,50 @@
-#!/bin/bash
-# context-drift-check.sh
-# Hook: PostToolUse (Bash, matching git commit)
-# Purpose: Detect stale AI context files after commits
-# Installed by: /contextdocs:context-guard install
-#
-# Claude Code only — OpenCode, Codex CLI, Cursor, and other tools
-# do not support Claude Code hooks.
-
+#!/usr/bin/env bash
+# context-drift-check.sh — Detect context drift and emit structured audit events.
 set -euo pipefail
 
-# Read hook input from stdin
-INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+AUDIT_LOG=".claude/audit.jsonl"
+HOOK_NAME="context-drift-check"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
-# Only process successful git commit commands
-[ "$TOOL_NAME" != "Bash" ] && echo '{}' && exit 0
-[[ "$COMMAND" != *"git commit"* ]] && echo '{}' && exit 0
-
-# Resolve project directory
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-cd "$PROJECT_DIR" || { echo '{}'; exit 0; }
-
-# Must be inside a git repository
-git rev-parse --is-inside-work-tree &>/dev/null || { echo '{}'; exit 0; }
-
-# Throttle: skip if checked less than 1 hour ago
-THROTTLE_FILE=".git/.context-guard-last-check"
-if [ -f "$THROTTLE_FILE" ]; then
-  LAST_CHECK=$(cat "$THROTTLE_FILE" 2>/dev/null || echo "0")
-  NOW=$(date +%s)
-  ELAPSED=$((NOW - LAST_CHECK))
-  [ "$ELAPSED" -lt 3600 ] && echo '{}' && exit 0
-fi
-
-# Context files to check
-CONTEXT_FILES=("CLAUDE.md" "AGENTS.md" "GEMINI.md" ".cursorrules"
-               ".github/copilot-instructions.md" ".windsurfrules" ".clinerules")
-
-STALE=()
-BROKEN_PATHS=()
-
-for CTX in "${CONTEXT_FILES[@]}"; do
-  [ ! -f "$CTX" ] && continue
-
-  # Last commit that touched this context file
-  CTX_COMMIT_TIME=$(git log -1 --format=%ct -- "$CTX" 2>/dev/null || echo "0")
-
-  # Last commit that touched source files (excluding docs)
-  SRC_COMMIT_TIME=$(git log -1 --format=%ct -- \
-    '*.ts' '*.js' '*.py' '*.go' '*.rs' '*.json' '*.toml' '*.yaml' '*.yml' \
-    ':!*.md' ':!CHANGELOG.md' ':!README.md' ':!docs/*' 2>/dev/null || echo "0")
-
-  if [ "$SRC_COMMIT_TIME" -gt "$CTX_COMMIT_TIME" ] 2>/dev/null; then
-    CTX_HASH=$(git log -1 --format=%H -- "$CTX" 2>/dev/null || echo "HEAD")
-    COMMITS_BEHIND=$(git rev-list --count "$CTX_HASH"..HEAD -- \
-      '*.ts' '*.js' '*.py' '*.go' '*.rs' '*.json' '*.toml' '*.yaml' '*.yml' \
-      ':!*.md' 2>/dev/null || echo "?")
-    STALE+=("$CTX: $COMMITS_BEHIND source commits since last update")
-  fi
-
-  # Quick broken-path check: extract backtick-quoted file references
-  while IFS= read -r REF_PATH; do
-    if [ -n "$REF_PATH" ] && [ ! -e "$REF_PATH" ]; then
-      # Fallback: check if basename exists anywhere in repo (tracked or untracked)
-      BASENAME=$(basename "$REF_PATH")
-      if ! git ls-files "*/$BASENAME" "$BASENAME" 2>/dev/null | grep -q . \
-        && ! find . -name "$BASENAME" -not -path './.git/*' -print -quit 2>/dev/null | grep -q .; then
-        BROKEN_PATHS+=("$CTX references \`$REF_PATH\` (not found)")
-      fi
-    fi
-  done < <(grep -oE '`[a-zA-Z][a-zA-Z0-9._/-]+\.(ts|js|py|go|rs|md|json|toml|yaml|yml|sh)`' "$CTX" 2>/dev/null \
-    | tr -d '`' | sort -u | head -20)
-done
-
-# Update throttle timestamp
-date +%s > "$THROTTLE_FILE" 2>/dev/null
-
-# Build output
-ISSUES=()
-for S in "${STALE[@]}"; do ISSUES+=("  - $S"); done
-for B in "${BROKEN_PATHS[@]}"; do ISSUES+=("  - $B"); done
-
-if [ ${#ISSUES[@]} -gt 0 ]; then
-  # Build multiline message
-  MSG="AI CONTEXT DRIFT DETECTED:"
-  for I in "${ISSUES[@]}"; do
-    MSG="$MSG\n$I"
-  done
-  MSG="$MSG\nLaunch the context-updater agent to fix these issues, or run /contextdocs:ai-context audit for a full check."
-
-  # Escape for JSON
-  MSG_JSON=$(printf '%s' "$MSG" | sed 's/"/\\"/g')
-
-  cat << EOF
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PostToolUse",
-    "additionalContext": "$MSG_JSON"
-  }
+emit_event() {
+  local severity="$1"
+  local message="$2"
+  local extra="${3:-}"
+  printf '{"hook":"%s","severity":"%s","message":"%s","timestamp":"%s"%s}\n' \
+    "$HOOK_NAME" "$severity" "$message" "$TIMESTAMP" "$extra" >> "$AUDIT_LOG"
 }
-EOF
-else
-  echo '{}'
+
+# Read Claude's proposed output from stdin (passed by hook runner)
+INPUT=$(cat)
+
+if [ -z "$INPUT" ]; then
+  exit 0
 fi
+
+# --- Heuristic checks ---
+
+# 1. Detect large file rewrites outside expected paths
+if echo "$INPUT" | grep -qE '"path"\s*:\s*"(src|lib|core)/' ; then
+  MATCH=$(echo "$INPUT" | grep -oE '"path"\s*:\s*"[^"]+"' | head -1)
+  emit_event "warn" "Potential drift: write to core path" ",\"detail\":\"$MATCH\""
+fi
+
+# 2. Detect attempted deletions of protected files
+if echo "$INPUT" | grep -qiE '(delete|remove|unlink).*(hooks\.json|audit\.jsonl)'; then
+  emit_event "error" "Drift: attempted deletion of protected file" ",\"blocked\":true"
+  echo "[context-drift-check] BLOCKED: attempted deletion of protected audit/config file." >&2
+  exit 2
+fi
+
+# 3. Detect scope creep — touching more than N files at once
+FILE_COUNT=$(echo "$INPUT" | grep -oE '"path"\s*:\s*"[^"]+"' | wc -l | tr -d ' ')
+if [ "$FILE_COUNT" -gt 10 ]; then
+  emit_event "warn" "Drift: large batch write detected" ",\"file_count\":$FILE_COUNT"
+fi
+
+# 4. Detect phase mismatch keywords
+if echo "$INPUT" | grep -qiE '(publish|deploy|release|pypi|npm publish)'; then
+  emit_event "warn" "Drift: release-phase keyword detected in developing phase"
+fi
+
+exit 0
