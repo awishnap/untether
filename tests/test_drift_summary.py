@@ -83,7 +83,10 @@ def test_summarize_top_triggers_default_limit():
     assert len(s["top_triggers"]) <= 5
 
 
-def test_summarize_empty():
+def test_summarize_empty_events():
+    # Edge case I hit when the audit log exists but has no drift entries yet
     s = drift_summary.summarize([])
     assert s["total"] == 0
     assert s["by_severity"] == {}
+    assert s["by_date"] == {}
+    assert s["top_triggers"] == []
