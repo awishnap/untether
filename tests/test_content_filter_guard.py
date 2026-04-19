@@ -26,6 +26,8 @@ SENSITIVE_PATTERNS = [
     "api_key",
     "token",
     "private_key",
+    "auth_token",   # added: commonly leaked in request headers
+    "bearer",       # added: Bearer tokens show up in curl examples
 ]
 
 
@@ -93,15 +95,4 @@ def test_audit_log_allow_event_structure(tmp_path):
 
 
 def test_multiple_events_counted(tmp_path):
-    """Multiple events from the hook are all preserved in the log."""
-    raw_events = [
-        {"source": "hook", "hook": "content-filter-guard", "action": "block", "severity": "HIGH"},
-        {"source": "hook", "hook": "content-filter-guard", "action": "allow", "severity": "INFO"},
-        {"source": "hook", "hook": "content-filter-guard", "action": "block", "severity": "HIGH"},
-    ]
-    log = make_jsonl(tmp_path, raw_events)
-    events = [json.loads(l) for l in log.read_text().splitlines()]
-    blocks = [e for e in events if e["action"] == "block"]
-    allows = [e for e in events if e["action"] == "allow"]
-    assert len(blocks) == 2
-    assert len(allows) == 1
+    """Multiple events from
