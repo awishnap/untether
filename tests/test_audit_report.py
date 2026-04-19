@@ -60,6 +60,13 @@ def test_filter_combined() -> None:
     assert result[0]["severity"] == "info"
 
 
+def test_filter_by_warn_severity() -> None:
+    # Personal note: I often filter for warnings during local dev to catch drift early
+    result = audit_report.filter_events(SAMPLE_EVENTS, severity="warn", tail=0)
+    assert len(result) == 1
+    assert result[0]["hook"] == "context-drift-check"
+
+
 def test_print_summary_no_crash(capsys: pytest.CaptureFixture) -> None:
     audit_report.print_summary(SAMPLE_EVENTS)
     captured = capsys.readouterr()
