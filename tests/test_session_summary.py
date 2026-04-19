@@ -41,6 +41,9 @@ def test_summarize_empty():
     assert summary["total"] == 0
     assert summary["first"] is None
     assert summary["last"] is None
+    # also verify the hooks and severities dicts are empty, not absent
+    assert summary["hooks"] == {}
+    assert summary["severities"] == {}
 
 
 def test_summarize_counts(tmp_path):
