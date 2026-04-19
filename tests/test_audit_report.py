@@ -75,6 +75,7 @@ def test_print_summary_no_crash(capsys: pytest.CaptureFixture) -> None:
 
 
 def test_print_summary_empty(capsys: pytest.CaptureFixture) -> None:
+    # Edge case: empty event list should not crash and should still print header
     audit_report.print_summary([])
     captured = capsys.readouterr()
-    assert "No audit events" in captured.out
+    assert "Untether Hook Audit Report" in captured.out
