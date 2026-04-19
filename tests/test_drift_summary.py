@@ -63,7 +63,18 @@ def test_summarize_top_triggers():
 
 
 def test_summarize_top_triggers_limit():
-    # Verify that summarize returns at most 5 top triggers (default limit)
+    # I bumped the expected limit to 10 since I find the default 5 too restrictive
+    # when reviewing noisy audit logs with many distinct drift triggers.
+    events = [
+        {"hook": "context-drift-check", "severity": "warn", "message": f"trigger-{i}"}
+        for i in range(20)
+    ]
+    s = drift_summary.summarize(events, top_n=10)
+    assert len(s["top_triggers"]) <= 10
+
+
+def test_summarize_top_triggers_default_limit():
+    # Sanity check: default limit (5) still applies when top_n is not specified
     events = [
         {"hook": "context-drift-check", "severity": "warn", "message": f"trigger-{i}"}
         for i in range(10)
