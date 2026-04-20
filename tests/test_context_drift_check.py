@@ -87,5 +87,11 @@ def test_audit_log_written_on_event(tmp_path):
     log_file = tmp_path / "audit.jsonl"
     payload = make_hook_input("Write", {"file_path": "/tmp/out.py", "content": "x=1"})
     run_hook(payload, env_extra={"AUDIT_LOG": str(log_file)})
-    # Log may or may not be written depending on hook logic; just ensure no crash
-    assert True
+    # Log may or may not be written depending on hook implementation,
+    # but the file path should at least be a valid location if created.
+    if log_file.exists():
+        lines = log_file.read_text().strip().splitlines()
+        assert len(lines) >= 1, "Expected at least one log entry"
+        # Each line should be valid JSON
+        for line in lines:
+            assert isinstance(json.loads(line), dict)
