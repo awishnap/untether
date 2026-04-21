@@ -64,3 +64,9 @@ def test_compute_stats_empty():
     stats = compute_stats([])
     assert stats["total"] == 0
     assert stats["hook_counts"] == {}
+
+
+def test_compute_stats_outcomes_empty():
+    # Ensure outcomes key is present and empty when there are no events
+    stats = compute_stats([])
+    assert stats["outcomes"] == {}
