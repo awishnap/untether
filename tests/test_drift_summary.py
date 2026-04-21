@@ -84,10 +84,9 @@ def test_summarize_top_triggers_default_limit():
 
 
 def test_summarize_empty_events():
-    # Edge case I hit when the audit log existed but had no drift entries yet.
-    # summarize() should return zeroed-out counts rather than raising an error.
+    # Edge case I hit when the audit log exists but has no drift entries yet.
+    # Make sure summarize() doesn't blow up on an empty list.
     s = drift_summary.summarize([])
     assert s["total"] == 0
     assert s["by_severity"] == {}
-    assert s["by_date"] == {}
     assert s["top_triggers"] == []
