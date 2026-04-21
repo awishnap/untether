@@ -28,6 +28,7 @@ SENSITIVE_PATTERNS = [
     "private_key",
     "auth_token",   # added: commonly leaked in request headers
     "bearer",       # added: Bearer tokens show up in curl examples
+    "client_secret", # personal add: OAuth client secrets are easy to miss
 ]
 
 
@@ -92,7 +93,3 @@ def test_audit_log_allow_event_structure(tmp_path):
     e = events[0]
     assert e["action"] == "allow"
     assert e["severity"] == "INFO"
-
-
-def test_multiple_events_counted(tmp_path):
-    """Multiple events from
