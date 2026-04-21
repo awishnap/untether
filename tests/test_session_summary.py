@@ -32,6 +32,7 @@ def test_load_events_session_filter(tmp_path):
 
 
 def test_load_events_missing_file(tmp_path):
+    # Graceful handling of missing log files is important for first-run scenarios
     events = load_session_events(tmp_path / "missing.jsonl")
     assert events == []
 
@@ -52,6 +53,8 @@ def test_summarize_counts(tmp_path):
     summary = summarize_session(events)
     assert summary["total"] == 3
     assert summary["hooks"]["audit-log"] == 1
+    assert summary["hooks"]["content-filter-guard"] == 1
+    assert summary["hooks"]["release-guard"] == 1
     assert summary["severities"]["info"] == 1
     assert summary["severities"]["warn"] == 1
     assert summary["severities"]["error"] == 1
