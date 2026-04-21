@@ -66,3 +66,11 @@ def test_summarize_timestamps(tmp_path):
     summary = summarize_session(events)
     assert summary["first"] == "2024-01-01T10:00:00Z"
     assert summary["last"] == "2024-01-01T10:03:00Z"
+
+
+def test_load_events_empty_file(tmp_path):
+    # Edge case: an empty log file should return an empty list, not raise an error
+    p = tmp_path / "empty.jsonl"
+    p.write_text("")
+    events = load_session_events(p)
+    assert events == []
